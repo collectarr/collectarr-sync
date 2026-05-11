@@ -1,0 +1,2 @@
+"""Collectarr personal sync service."""
+

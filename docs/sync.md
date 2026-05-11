@@ -15,9 +15,9 @@ The Flutter app writes personal data to its local Drift database:
 
 This lets Android, desktop, and web builds work offline without sending private collection state to the central metadata server.
 
-## Future Personal Sync Service
+## Personal Sync Service
 
-Multi-device personal sync should be implemented as a separate opt-in service, tentatively named `collectarr-sync`.
+Multi-device personal sync lives in a separate opt-in service named `collectarr-sync`.
 
 That service is user-hosted and can expose the user's personal database to their own devices:
 
@@ -26,9 +26,24 @@ That service is user-hosted and can expose the user's personal database to their
 - optional web client connects to the user's own sync service
 - central `collectarr` metadata server remains unaware of personal collection state
 
-## Planned Contract
+## Running Locally
 
-The future `collectarr-sync` service can use the previous diff-oriented shape:
+```powershell
+Copy-Item .env.example .env
+docker compose --profile sync up --build sync
+```
+
+The service listens on http://localhost:8020 by default and stores data in the `sync_data` Docker volume. Requests to `/sync/*` require:
+
+```http
+X-Collectarr-Sync-Key: collectarr-sync-dev-key
+```
+
+Change `SYNC_API_KEY` before exposing the service outside your local network.
+
+## Contract
+
+The current service uses a diff-oriented shape:
 
 - `POST /sync/push`
 - `POST /sync/pull`
@@ -44,3 +59,32 @@ Suggested sync fields:
 - `payload`: entity-specific local data
 
 Initial conflict policy should remain last-write-wins, with tombstones for deletes. Manual conflict resolution can come later once the local model stabilizes.
+
+### Push Example
+
+```json
+{
+  "device_id": "desktop",
+  "changes": [
+    {
+      "entity_type": "owned_item",
+      "entity_id": "owned-1",
+      "action": "upsert",
+      "client_changed_at": "2026-05-11T10:00:00Z",
+      "payload": {
+        "item_id": "comic-1",
+        "condition": "Near Mint",
+        "grade": "9.8"
+      }
+    }
+  ]
+}
+```
+
+### Pull Example
+
+```json
+{
+  "since": "2026-05-11T00:00:00Z"
+}
+```
