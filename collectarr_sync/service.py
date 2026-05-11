@@ -34,6 +34,13 @@ def parse_dt(value: str | None) -> datetime | None:
 
 
 class SyncService:
+    _last_pruned_at: datetime | None = None
+    _prune_interval = timedelta(days=1)
+
+    @classmethod
+    def reset_prune_state_for_testing(cls) -> None:
+        cls._last_pruned_at = None
+
     async def push(self, request: SyncPushRequest) -> SyncPushResponse:
         server_time = utc_now()
         accepted: list[SyncChangeOut] = []
@@ -64,8 +71,8 @@ class SyncService:
                 accepted.append(accepted_change)
 
             await connection.commit()
-            await self._prune_changes(connection, server_time)
-            await connection.commit()
+            if await self._prune_changes_if_due(connection, server_time):
+                await connection.commit()
         finally:
             await connection.close()
 
@@ -168,6 +175,18 @@ class SyncService:
             """,
             (iso(cutoff),),
         )
+
+    async def _prune_changes_if_due(
+        self, connection: aiosqlite.Connection, server_time: datetime
+    ) -> bool:
+        if (
+            self.__class__._last_pruned_at is not None
+            and server_time - self.__class__._last_pruned_at < self._prune_interval
+        ):
+            return False
+        await self._prune_changes(connection, server_time)
+        self.__class__._last_pruned_at = server_time
+        return True
 
     async def _get_entity(
         self, connection: aiosqlite.Connection, entity_type: str, entity_id: str
