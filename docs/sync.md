@@ -1,72 +1,46 @@
-# Sync Contract
+# Sync Boundary
 
-Collectarr uses an offline-first, diff-based sync model. The client writes local changes first, queues diffs, then pushes them to the server when connectivity is available.
+Collectarr keeps the central backend metadata-only. The hosted or shared server stores canonical catalog data, provider IDs, images, search indexes, auth/admin identity, and operational state. It does not store a user's owned items, wishlist, purchase dates, prices, grades, notes, tags, or personal shelves.
 
-## Concepts
+## Local-First Client
 
-- `device_id`: stable client installation identifier.
-- `client_changed_at`: timestamp assigned by the client when the local mutation happened.
-- `changed_at`: server timestamp assigned when the server records an accepted change.
-- `entity_type`: currently `owned_item`.
-- `action`: `upsert` or `delete`.
-- `payload`: entity-specific data.
+The Flutter app writes personal data to its local Drift database:
 
-## Push
+- owned items
+- wishlist entries
+- condition and grading
+- purchase date and price
+- personal notes
+- local delete markers
 
-`POST /sync/push`
+This lets Android, desktop, and web builds work offline without sending private collection state to the central metadata server.
 
-```json
-{
-  "device_id": "desktop-01",
-  "changes": [
-    {
-      "entity_type": "owned_item",
-      "entity_id": "3f72efaf-4a42-420c-b496-2de86302e09f",
-      "device_id": "desktop-01",
-      "action": "upsert",
-      "client_changed_at": "2026-05-11T09:00:00Z",
-      "payload": {
-        "item_id": "3c7a9fd4-99c1-42f9-bf8d-4c74a7f40cda",
-        "edition_id": null,
-        "variant_id": null,
-        "condition": "Near Mint",
-        "grade": "9.4",
-        "personal_notes": "Bought locally"
-      }
-    }
-  ]
-}
-```
+## Future Personal Sync Service
 
-The server records accepted changes and returns the resulting server-side changes.
+Multi-device personal sync should be implemented as a separate opt-in service, tentatively named `collectarr-sync`.
 
-## Pull
+That service is user-hosted and can expose the user's personal database to their own devices:
 
-`POST /sync/pull`
+- desktop app writes local changes
+- Android app writes local changes
+- optional web client connects to the user's own sync service
+- central `collectarr` metadata server remains unaware of personal collection state
 
-```json
-{
-  "since": "2026-05-11T08:00:00Z"
-}
-```
+## Planned Contract
 
-The server returns:
+The future `collectarr-sync` service can use the previous diff-oriented shape:
 
-- `server_time`
-- the user collection state, including tombstones
-- ordered changes since the provided timestamp.
+- `POST /sync/push`
+- `POST /sync/pull`
+- `GET /sync/changes?since=...`
 
-## Changes
+Suggested sync fields:
 
-`GET /sync/changes?since=2026-05-11T08:00:00Z`
+- `device_id`: stable client installation identifier
+- `client_changed_at`: timestamp assigned by the client
+- `changed_at`: service timestamp assigned when a change is accepted
+- `entity_type`: `owned_item`, `wishlist_item`, `note`, or future local entities
+- `action`: `upsert` or `delete`
+- `payload`: entity-specific local data
 
-Returns ordered sync change records for the authenticated user.
-
-## Conflict Policy
-
-The initial policy is last-write-wins:
-
-- if the server has a newer `client_updated_at` than an incoming `client_changed_at`, the server state wins
-- otherwise the incoming change is applied
-- deletes are represented as tombstones so other devices can observe them.
-
+Initial conflict policy should remain last-write-wins, with tombstones for deletes. Manual conflict resolution can come later once the local model stabilizes.
