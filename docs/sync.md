@@ -41,6 +41,14 @@ X-Collectarr-Sync-Key: collectarr-sync-dev-key
 
 Change `SYNC_API_KEY` before exposing the service outside your local network.
 
+Flutter clients read the sync endpoint from Dart defines:
+
+```powershell
+flutter run --dart-define=COLLECTARR_SYNC_BASE_URL=http://localhost:8020 --dart-define=COLLECTARR_SYNC_KEY=collectarr-sync-dev-key
+```
+
+Use `http://10.0.2.2:8020` for the Android emulator, or the host machine's LAN IP for physical devices.
+
 ## Contract
 
 The current service uses a diff-oriented shape:
