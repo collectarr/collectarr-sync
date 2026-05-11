@@ -14,6 +14,7 @@ from collectarr_sync.schemas import (
     SyncPullResponse,
     SyncPushRequest,
     SyncPushResponse,
+    SyncStatusResponse,
     SyncedEntity,
     as_utc,
 )
@@ -96,6 +97,27 @@ class SyncService:
         finally:
             await connection.close()
         return SyncChangesResponse(server_time=server_time, changes=changes)
+
+    async def status(self, schema_version: int) -> SyncStatusResponse:
+        server_time = utc_now()
+        settings = get_settings()
+        connection = await connect()
+        try:
+            entity_count = await self._count(connection, "entities")
+            tombstone_count = await self._count_tombstones(connection)
+            change_count = await self._count(connection, "changes")
+            last_changed_at = await self._last_changed_at(connection)
+        finally:
+            await connection.close()
+        return SyncStatusResponse(
+            server_time=server_time,
+            schema_version=schema_version,
+            entity_count=entity_count,
+            tombstone_count=tombstone_count,
+            change_count=change_count,
+            retention_days=settings.sync_change_retention_days,
+            last_changed_at=last_changed_at,
+        )
 
     async def _accept_change(
         self,
@@ -199,6 +221,33 @@ class SyncService:
             (entity_type, entity_id),
         )
         return await cursor.fetchone()
+
+    async def _count(self, connection: aiosqlite.Connection, table: str) -> int:
+        if table not in {"entities", "changes"}:
+            raise ValueError("Unsupported sync table")
+        cursor = await connection.execute(f"select count(*) as count from {table}")
+        row = await cursor.fetchone()
+        return int(row["count"])
+
+    async def _count_tombstones(self, connection: aiosqlite.Connection) -> int:
+        cursor = await connection.execute(
+            """
+            select count(*) as count from entities
+            where deleted_at is not null
+            """
+        )
+        row = await cursor.fetchone()
+        return int(row["count"])
+
+    async def _last_changed_at(self, connection: aiosqlite.Connection) -> datetime | None:
+        cursor = await connection.execute(
+            """
+            select max(changed_at) as changed_at
+            from entities
+            """
+        )
+        row = await cursor.fetchone()
+        return parse_dt(row["changed_at"]) if row["changed_at"] else None
 
     async def _list_entities(
         self, connection: aiosqlite.Connection, since: datetime | None

@@ -83,3 +83,13 @@ class SyncPullResponse(BaseModel):
 class SyncChangesResponse(BaseModel):
     server_time: datetime
     changes: list[SyncChangeOut]
+
+
+class SyncStatusResponse(BaseModel):
+    server_time: datetime
+    schema_version: int
+    entity_count: int
+    tombstone_count: int
+    change_count: int
+    retention_days: int
+    last_changed_at: datetime | None = None

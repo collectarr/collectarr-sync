@@ -55,6 +55,40 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
 
 
 @pytest.mark.asyncio
+async def test_sync_status_reports_counts(client, sync_headers):
+    unauthorized = await client.get("/sync/status")
+    assert unauthorized.status_code == 401
+
+    await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "owned_item",
+                    "entity_id": "owned-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:00:00Z",
+                    "payload": {"item_id": "comic-1"},
+                }
+            ],
+        },
+    )
+
+    response = await client.get("/sync/status", headers=sync_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["schema_version"] == 1
+    assert data["entity_count"] == 1
+    assert data["tombstone_count"] == 0
+    assert data["change_count"] == 1
+    assert data["retention_days"] == 90
+    assert data["last_changed_at"] is not None
+
+
+@pytest.mark.asyncio
 async def test_stale_client_change_is_rejected(client, sync_headers):
     await client.post(
         "/sync/push",
