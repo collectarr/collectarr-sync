@@ -1,9 +1,10 @@
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import aiosqlite
 
+from collectarr_sync.config import get_settings
 from collectarr_sync.db import connect
 from collectarr_sync.schemas import (
     RejectedChange,
@@ -63,6 +64,8 @@ class SyncService:
                 accepted.append(accepted_change)
 
             await connection.commit()
+            await self._prune_changes(connection, server_time)
+            await connection.commit()
         finally:
             await connection.close()
 
@@ -73,7 +76,7 @@ class SyncService:
         connection = await connect()
         try:
             entities = await self._list_entities(connection, since)
-            changes = await self._list_changes(connection, since)
+            changes = await self._list_changes(connection, since) if since else []
         finally:
             await connection.close()
         return SyncPullResponse(server_time=server_time, entities=entities, changes=changes)
@@ -151,6 +154,19 @@ class SyncService:
             client_changed_at=change.client_changed_at,
             changed_at=changed_at,
             payload=change.payload,
+        )
+
+    async def _prune_changes(
+        self, connection: aiosqlite.Connection, server_time: datetime
+    ) -> None:
+        retention_days = get_settings().sync_change_retention_days
+        cutoff = server_time - timedelta(days=retention_days)
+        await connection.execute(
+            """
+            delete from changes
+            where changed_at < ?
+            """,
+            (iso(cutoff),),
         )
 
     async def _get_entity(
