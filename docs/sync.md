@@ -41,6 +41,14 @@ X-Collectarr-Sync-Key: collectarr-sync-dev-key
 
 Change `SYNC_API_KEY` before exposing the service outside your local network.
 
+Flutter clients read the sync endpoint from Dart defines:
+
+```powershell
+flutter run --dart-define=COLLECTARR_SYNC_BASE_URL=http://localhost:8020 --dart-define=COLLECTARR_SYNC_KEY=collectarr-sync-dev-key
+```
+
+Use `http://10.0.2.2:8020` for the Android emulator, or the host machine's LAN IP for physical devices.
+
 ## Contract
 
 The current service uses a diff-oriented shape:
@@ -59,6 +67,10 @@ Suggested sync fields:
 - `payload`: entity-specific local data
 
 Initial conflict policy should remain last-write-wins, with tombstones for deletes. Manual conflict resolution can come later once the local model stabilizes.
+
+Full pulls return the current entity state only. Incremental pulls with `since` return both current entities changed since that timestamp and the ordered change records for that window.
+
+The append-only `changes` log is retained for `SYNC_CHANGE_RETENTION_DAYS` days, defaulting to 90. Pruned changes do not remove current entity state or delete tombstones.
 
 ### Push Example
 

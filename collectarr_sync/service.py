@@ -1,9 +1,10 @@
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import aiosqlite
 
+from collectarr_sync.config import get_settings
 from collectarr_sync.db import connect
 from collectarr_sync.schemas import (
     RejectedChange,
@@ -13,6 +14,7 @@ from collectarr_sync.schemas import (
     SyncPullResponse,
     SyncPushRequest,
     SyncPushResponse,
+    SyncStatusResponse,
     SyncedEntity,
     as_utc,
 )
@@ -33,6 +35,13 @@ def parse_dt(value: str | None) -> datetime | None:
 
 
 class SyncService:
+    _last_pruned_at: datetime | None = None
+    _prune_interval = timedelta(days=1)
+
+    @classmethod
+    def reset_prune_state_for_testing(cls) -> None:
+        cls._last_pruned_at = None
+
     async def push(self, request: SyncPushRequest) -> SyncPushResponse:
         server_time = utc_now()
         accepted: list[SyncChangeOut] = []
@@ -42,8 +51,13 @@ class SyncService:
         try:
             for change in request.changes:
                 current = await self._get_entity(connection, change.entity_type, change.entity_id)
-                current_client_changed_at = parse_dt(current["client_changed_at"]) if current else None
-                if current_client_changed_at and current_client_changed_at > change.client_changed_at:
+                current_client_changed_at = (
+                    parse_dt(current["client_changed_at"]) if current else None
+                )
+                if (
+                    current_client_changed_at
+                    and current_client_changed_at > change.client_changed_at
+                ):
                     rejected.append(
                         RejectedChange(
                             entity_type=change.entity_type,
@@ -63,6 +77,8 @@ class SyncService:
                 accepted.append(accepted_change)
 
             await connection.commit()
+            if await self._prune_changes_if_due(connection, server_time):
+                await connection.commit()
         finally:
             await connection.close()
 
@@ -72,8 +88,10 @@ class SyncService:
         server_time = utc_now()
         connection = await connect()
         try:
+            if await self._prune_changes_if_due(connection, server_time):
+                await connection.commit()
             entities = await self._list_entities(connection, since)
-            changes = await self._list_changes(connection, since)
+            changes = await self._list_changes(connection, since) if since else []
         finally:
             await connection.close()
         return SyncPullResponse(server_time=server_time, entities=entities, changes=changes)
@@ -82,10 +100,33 @@ class SyncService:
         server_time = utc_now()
         connection = await connect()
         try:
+            if await self._prune_changes_if_due(connection, server_time):
+                await connection.commit()
             changes = await self._list_changes(connection, since)
         finally:
             await connection.close()
         return SyncChangesResponse(server_time=server_time, changes=changes)
+
+    async def status(self, schema_version: int) -> SyncStatusResponse:
+        server_time = utc_now()
+        settings = get_settings()
+        connection = await connect()
+        try:
+            entity_count = await self._count(connection, "entities")
+            tombstone_count = await self._count_tombstones(connection)
+            change_count = await self._count(connection, "changes")
+            last_changed_at = await self._last_changed_at(connection)
+        finally:
+            await connection.close()
+        return SyncStatusResponse(
+            server_time=server_time,
+            schema_version=schema_version,
+            entity_count=entity_count,
+            tombstone_count=tombstone_count,
+            change_count=change_count,
+            retention_days=settings.sync_change_retention_days,
+            last_changed_at=last_changed_at,
+        )
 
     async def _accept_change(
         self,
@@ -153,6 +194,29 @@ class SyncService:
             payload=change.payload,
         )
 
+    async def _prune_changes(self, connection: aiosqlite.Connection, server_time: datetime) -> None:
+        retention_days = get_settings().sync_change_retention_days
+        cutoff = server_time - timedelta(days=retention_days)
+        await connection.execute(
+            """
+            delete from changes
+            where changed_at < ?
+            """,
+            (iso(cutoff),),
+        )
+
+    async def _prune_changes_if_due(
+        self, connection: aiosqlite.Connection, server_time: datetime
+    ) -> bool:
+        if (
+            self.__class__._last_pruned_at is not None
+            and server_time - self.__class__._last_pruned_at < self._prune_interval
+        ):
+            return False
+        await self._prune_changes(connection, server_time)
+        self.__class__._last_pruned_at = server_time
+        return True
+
     async def _get_entity(
         self, connection: aiosqlite.Connection, entity_type: str, entity_id: str
     ) -> aiosqlite.Row | None:
@@ -164,6 +228,33 @@ class SyncService:
             (entity_type, entity_id),
         )
         return await cursor.fetchone()
+
+    async def _count(self, connection: aiosqlite.Connection, table: str) -> int:
+        if table not in {"entities", "changes"}:
+            raise ValueError("Unsupported sync table")
+        cursor = await connection.execute(f"select count(*) as count from {table}")
+        row = await cursor.fetchone()
+        return int(row["count"])
+
+    async def _count_tombstones(self, connection: aiosqlite.Connection) -> int:
+        cursor = await connection.execute(
+            """
+            select count(*) as count from entities
+            where deleted_at is not null
+            """
+        )
+        row = await cursor.fetchone()
+        return int(row["count"])
+
+    async def _last_changed_at(self, connection: aiosqlite.Connection) -> datetime | None:
+        cursor = await connection.execute(
+            """
+            select max(changed_at) as changed_at
+            from entities
+            """
+        )
+        row = await cursor.fetchone()
+        return parse_dt(row["changed_at"]) if row["changed_at"] else None
 
     async def _list_entities(
         self, connection: aiosqlite.Connection, since: datetime | None
