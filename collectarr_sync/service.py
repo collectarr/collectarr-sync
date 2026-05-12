@@ -51,8 +51,13 @@ class SyncService:
         try:
             for change in request.changes:
                 current = await self._get_entity(connection, change.entity_type, change.entity_id)
-                current_client_changed_at = parse_dt(current["client_changed_at"]) if current else None
-                if current_client_changed_at and current_client_changed_at > change.client_changed_at:
+                current_client_changed_at = (
+                    parse_dt(current["client_changed_at"]) if current else None
+                )
+                if (
+                    current_client_changed_at
+                    and current_client_changed_at > change.client_changed_at
+                ):
                     rejected.append(
                         RejectedChange(
                             entity_type=change.entity_type,
@@ -83,6 +88,8 @@ class SyncService:
         server_time = utc_now()
         connection = await connect()
         try:
+            if await self._prune_changes_if_due(connection, server_time):
+                await connection.commit()
             entities = await self._list_entities(connection, since)
             changes = await self._list_changes(connection, since) if since else []
         finally:
@@ -93,6 +100,8 @@ class SyncService:
         server_time = utc_now()
         connection = await connect()
         try:
+            if await self._prune_changes_if_due(connection, server_time):
+                await connection.commit()
             changes = await self._list_changes(connection, since)
         finally:
             await connection.close()
@@ -185,9 +194,7 @@ class SyncService:
             payload=change.payload,
         )
 
-    async def _prune_changes(
-        self, connection: aiosqlite.Connection, server_time: datetime
-    ) -> None:
+    async def _prune_changes(self, connection: aiosqlite.Connection, server_time: datetime) -> None:
         retention_days = get_settings().sync_change_retention_days
         cutoff = server_time - timedelta(days=retention_days)
         await connection.execute(

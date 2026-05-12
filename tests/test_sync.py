@@ -206,3 +206,46 @@ async def test_push_prunes_old_change_log_entries(client, sync_headers):
 
     assert response.status_code == 200
     assert changes.json()["changes"] == []
+
+
+@pytest.mark.asyncio
+async def test_pull_prunes_old_change_log_entries(client, sync_headers):
+    connection = await connect()
+    try:
+        await connection.execute(
+            """
+            insert into changes (
+              id, entity_type, entity_id, action, payload_json, device_id,
+              client_changed_at, changed_at
+            )
+            values (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "old-change",
+                "owned_item",
+                "owned-old",
+                "upsert",
+                "{}",
+                "desktop",
+                "2000-01-01T00:00:00Z",
+                "2000-01-01T00:00:00Z",
+            ),
+        )
+        await connection.commit()
+    finally:
+        await connection.close()
+
+    response = await client.post(
+        "/sync/pull",
+        headers=sync_headers,
+        json={"since": "1999-01-01T00:00:00Z"},
+    )
+    changes = await client.get(
+        "/sync/changes",
+        headers=sync_headers,
+        params={"since": "1999-01-01T00:00:00Z"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["changes"] == []
+    assert changes.json()["changes"] == []
