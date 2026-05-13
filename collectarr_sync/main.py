@@ -8,6 +8,7 @@ from collectarr_sync.config import get_settings
 from collectarr_sync.db import CURRENT_SCHEMA_VERSION, initialize_database
 from collectarr_sync.schemas import (
     SyncChangesResponse,
+    SyncDeviceResponse,
     SyncPullRequest,
     SyncPullResponse,
     SyncPushRequest,
@@ -49,6 +50,11 @@ async def health() -> dict[str, str | int]:
 @app.get("/sync/status", response_model=SyncStatusResponse, tags=["sync"])
 async def sync_status(_: SyncAuth) -> SyncStatusResponse:
     return await SyncService().status(CURRENT_SCHEMA_VERSION)
+
+
+@app.get("/sync/devices", response_model=list[SyncDeviceResponse], tags=["sync"])
+async def sync_devices(_: SyncAuth) -> list[SyncDeviceResponse]:
+    return await SyncService().devices()
 
 
 @app.post("/sync/push", response_model=SyncPushResponse, tags=["sync"])

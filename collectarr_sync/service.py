@@ -11,6 +11,7 @@ from collectarr_sync.schemas import (
     SyncChangeIn,
     SyncChangeOut,
     SyncChangesResponse,
+    SyncDeviceResponse,
     SyncPullResponse,
     SyncPushRequest,
     SyncPushResponse,
@@ -127,6 +128,35 @@ class SyncService:
             retention_days=settings.sync_change_retention_days,
             last_changed_at=last_changed_at,
         )
+
+    async def devices(self) -> list[SyncDeviceResponse]:
+        connection = await connect()
+        try:
+            cursor = await connection.execute(
+                """
+                select
+                  device_id,
+                  count(*) as change_count,
+                  min(changed_at) as first_seen_at,
+                  max(changed_at) as last_seen_at
+                from changes
+                group by device_id
+                order by max(changed_at) desc, device_id
+                """
+            )
+            rows = await cursor.fetchall()
+        finally:
+            await connection.close()
+        return [
+            SyncDeviceResponse(
+                device_id=row["device_id"],
+                change_count=int(row["change_count"]),
+                first_seen_at=parse_dt(row["first_seen_at"]),
+                last_seen_at=parse_dt(row["last_seen_at"]),
+            )
+            for row in rows
+            if row["first_seen_at"] and row["last_seen_at"]
+        ]
 
     async def _accept_change(
         self,

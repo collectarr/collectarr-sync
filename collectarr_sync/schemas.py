@@ -93,3 +93,10 @@ class SyncStatusResponse(BaseModel):
     change_count: int
     retention_days: int
     last_changed_at: datetime | None = None
+
+
+class SyncDeviceResponse(BaseModel):
+    device_id: str
+    change_count: int
+    first_seen_at: datetime
+    last_seen_at: datetime

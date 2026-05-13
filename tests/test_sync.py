@@ -89,6 +89,42 @@ async def test_sync_status_reports_counts(client, sync_headers):
 
 
 @pytest.mark.asyncio
+async def test_sync_devices_reports_seen_devices(client, sync_headers):
+    for device_id, entity_type, entity_id in [
+        ("desktop", "owned_item", "comic-1"),
+        ("phone", "wishlist_item", "comic-2"),
+    ]:
+        await client.post(
+            "/sync/push",
+            headers=sync_headers,
+            json={
+                "device_id": device_id,
+                "changes": [
+                    {
+                        "entity_type": entity_type,
+                        "entity_id": entity_id,
+                        "action": "upsert",
+                        "client_changed_at": "2026-05-12T08:00:00Z",
+                        "payload": {"item_id": entity_id},
+                    }
+                ],
+            },
+        )
+
+    unauthorized = await client.get("/sync/devices")
+    assert unauthorized.status_code == 401
+
+    response = await client.get("/sync/devices", headers=sync_headers)
+
+    assert response.status_code == 200
+    devices = {item["device_id"]: item for item in response.json()}
+    assert set(devices) == {"desktop", "phone"}
+    assert devices["desktop"]["change_count"] == 1
+    assert devices["desktop"]["first_seen_at"] is not None
+    assert devices["desktop"]["last_seen_at"] is not None
+
+
+@pytest.mark.asyncio
 async def test_stale_client_change_is_rejected(client, sync_headers):
     await client.post(
         "/sync/push",
