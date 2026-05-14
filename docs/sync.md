@@ -66,8 +66,9 @@ does not store private collection data as a fallback.
 
 ## Pairing Devices
 
-The Flutter Settings page can copy and apply a pairing code for another device.
-The code contains only connection settings:
+The Flutter Settings page can copy a pairing code, show the same code as a QR
+payload, and apply a pasted pairing code on another device. The code contains
+only connection settings:
 
 - metadata API URL
 - personal sync service URL
@@ -77,9 +78,8 @@ It does not include the local `device_id`. Each app installation keeps its own
 stable device identity so sync can distinguish the devices that wrote changes.
 
 For LAN setups, copy the pairing code from the configured desktop device and
-apply it on the phone after editing the host IP if needed. The code can be
-turned into a QR payload later because it is plain connection data, not a
-device-specific secret bundle.
+apply it on the phone after editing the host IP if needed. QR scanning can be
+added later, but manual copy/paste and QR rendering are enough for the MVP.
 
 ## Backup And Restore
 
@@ -115,8 +115,9 @@ Local SQLite backup:
    counts before syncing another device.
 
 Because clients keep local snapshots too, a restore can surface stale-client
-conflicts. Flutter Settings now lists rejected sync changes so the user can see
-which local writes were kept out by the service.
+conflicts. Flutter Settings lists rejected sync changes and lets the user choose
+between keeping the service version or queuing the current local version to
+overwrite the service on the next sync.
 
 ## Contract
 
@@ -135,7 +136,10 @@ Suggested sync fields:
 - `action`: `upsert` or `delete`
 - `payload`: entity-specific local data
 
-Initial conflict policy should remain last-write-wins, with tombstones for deletes. Manual conflict resolution can come later once the local model stabilizes.
+Initial conflict policy is last-write-wins, with tombstones for deletes. When a
+push is rejected because the service has a newer client timestamp, Flutter keeps
+the service version by default but can enqueue a fresh local retry from Settings
+when the local device should win.
 
 Full pulls return the current entity state only. Incremental pulls with `since` return both current entities changed since that timestamp and the ordered change records for that window.
 
