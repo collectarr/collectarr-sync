@@ -59,6 +59,11 @@ The Flutter Settings page also has endpoint presets for common local setups:
 Presets fill the metadata and sync URL fields. Save the settings after applying
 a preset, and edit the LAN host IP before saving it for a physical device.
 
+Web builds connect to the personal sync service directly from the browser.
+Browser CORS, HTTPS, and local-network rules can block web sync even when the
+same endpoint works from desktop or mobile. The central metadata server still
+does not store private collection data as a fallback.
+
 ## Pairing Devices
 
 The Flutter Settings page can copy and apply a pairing code for another device.
@@ -70,6 +75,48 @@ The code contains only connection settings:
 
 It does not include the local `device_id`. Each app installation keeps its own
 stable device identity so sync can distinguish the devices that wrote changes.
+
+For LAN setups, copy the pairing code from the configured desktop device and
+apply it on the phone after editing the host IP if needed. The code can be
+turned into a QR payload later because it is plain connection data, not a
+device-specific secret bundle.
+
+## Backup And Restore
+
+The sync service stores personal library state, so back it up separately from
+the central metadata server.
+
+Docker volume backup:
+
+```powershell
+docker compose --profile sync stop sync
+docker compose --profile sync cp sync:/data ./collectarr-sync-data
+Compress-Archive -Path .\collectarr-sync-data\* -DestinationPath .\collectarr-sync-data.zip -Force
+docker compose --profile sync start sync
+```
+
+Docker volume restore:
+
+```powershell
+Expand-Archive .\collectarr-sync-data.zip -DestinationPath .\collectarr-sync-data-restore -Force
+docker compose --profile sync stop sync
+docker compose --profile sync run --rm --entrypoint sh sync -lc "rm -rf /data/*"
+docker compose --profile sync cp ./collectarr-sync-data-restore/. sync:/data
+docker compose --profile sync start sync
+```
+
+Local SQLite backup:
+
+1. Stop `collectarr-sync`.
+2. Copy the SQLite database file and its `-wal` and `-shm` sidecar files if
+   they exist.
+3. Restart `collectarr-sync`.
+4. After restore, run `GET /status` and check the entity, tombstone, and change
+   counts before syncing another device.
+
+Because clients keep local snapshots too, a restore can surface stale-client
+conflicts. Flutter Settings now lists rejected sync changes so the user can see
+which local writes were kept out by the service.
 
 ## Contract
 
