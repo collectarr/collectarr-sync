@@ -6,6 +6,7 @@ Collectarr keeps the central backend metadata-only. The hosted or shared server 
 
 The Flutter app writes personal data to its local Drift database:
 
+- catalog item snapshots for saved library entries
 - owned items
 - wishlist entries
 - condition and grading
@@ -62,7 +63,7 @@ Suggested sync fields:
 - `device_id`: stable client installation identifier
 - `client_changed_at`: timestamp assigned by the client
 - `changed_at`: service timestamp assigned when a change is accepted
-- `entity_type`: `owned_item`, `wishlist_item`, `note`, or future local entities
+- `entity_type`: `library_item_snapshot`, `owned_item`, `wishlist_item`, `note`, or future local entities
 - `action`: `upsert` or `delete`
 - `payload`: entity-specific local data
 
@@ -72,12 +73,42 @@ Full pulls return the current entity state only. Incremental pulls with `since` 
 
 The append-only `changes` log is retained for `SYNC_CHANGE_RETENTION_DAYS` days, defaulting to 90. Pruned changes do not remove current entity state or delete tombstones.
 
+`library_item_snapshot` stores the catalog metadata needed to render a user's saved item on another device without calling the central Collectarr Core again. The snapshot is intentionally client-owned sync data, not canonical provider metadata. A typical payload includes:
+
+- `snapshot_version`
+- `kind`
+- `title`
+- `item_number`
+- `synopsis`
+- `cover_image_url`
+- `thumbnail_image_url`
+- `publisher`
+- `release_date`
+- `release_year`
+- `barcode`
+- `variant`
+
 ### Push Example
 
 ```json
 {
   "device_id": "desktop",
   "changes": [
+    {
+      "entity_type": "library_item_snapshot",
+      "entity_id": "comic-1",
+      "action": "upsert",
+      "client_changed_at": "2026-05-11T09:59:59Z",
+      "payload": {
+        "snapshot_version": 1,
+        "kind": "comic",
+        "title": "Absolute Batman",
+        "item_number": "1",
+        "cover_image_url": "https://cdn.example/absolute-batman-1.jpg",
+        "publisher": "DC",
+        "release_year": 2024
+      }
+    },
     {
       "entity_type": "owned_item",
       "entity_id": "owned-1",

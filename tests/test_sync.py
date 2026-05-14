@@ -55,6 +55,41 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
 
 
 @pytest.mark.asyncio
+async def test_push_then_pull_returns_library_item_snapshot(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "library_item_snapshot",
+                    "entity_id": "comic-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:00:00Z",
+                    "payload": {
+                        "snapshot_version": 1,
+                        "kind": "comic",
+                        "title": "Absolute Batman",
+                        "item_number": "1",
+                        "cover_image_url": "https://cdn.example/absolute.jpg",
+                    },
+                }
+            ],
+        },
+    )
+
+    pull = await client.post("/sync/pull", headers=sync_headers, json={})
+
+    assert response.status_code == 200
+    assert pull.status_code == 200
+    entity = pull.json()["entities"][0]
+    assert entity["entity_type"] == "library_item_snapshot"
+    assert entity["entity_id"] == "comic-1"
+    assert entity["payload"]["title"] == "Absolute Batman"
+
+
+@pytest.mark.asyncio
 async def test_sync_status_reports_counts(client, sync_headers):
     unauthorized = await client.get("/sync/status")
     assert unauthorized.status_code == 401
