@@ -50,6 +50,18 @@ flutter run --dart-define=COLLECTARR_SYNC_BASE_URL=http://localhost:8020 --dart-
 
 Use `http://10.0.2.2:8020` for the Android emulator, or the host machine's LAN IP for physical devices.
 
+## Pairing Devices
+
+The Flutter Settings page can copy and apply a pairing code for another device.
+The code contains only connection settings:
+
+- metadata API URL
+- personal sync service URL
+- personal sync key
+
+It does not include the local `device_id`. Each app installation keeps its own
+stable device identity so sync can distinguish the devices that wrote changes.
+
 ## Contract
 
 The current service uses a diff-oriented shape:
