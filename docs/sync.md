@@ -50,6 +50,15 @@ flutter run --dart-define=COLLECTARR_SYNC_BASE_URL=http://localhost:8020 --dart-
 
 Use `http://10.0.2.2:8020` for the Android emulator, or the host machine's LAN IP for physical devices.
 
+The Flutter Settings page also has endpoint presets for common local setups:
+
+- local desktop: `http://localhost:8010` and `http://localhost:8020`
+- Android emulator: `http://10.0.2.2:8010` and `http://10.0.2.2:8020`
+- LAN template: `http://192.168.1.10:8010` and `http://192.168.1.10:8020`
+
+Presets fill the metadata and sync URL fields. Save the settings after applying
+a preset, and edit the LAN host IP before saving it for a physical device.
+
 ## Pairing Devices
 
 The Flutter Settings page can copy and apply a pairing code for another device.
