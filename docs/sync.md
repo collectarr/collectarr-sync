@@ -126,6 +126,7 @@ The append-only `changes` log is retained for `SYNC_CHANGE_RETENTION_DAYS` days,
         "title": "Absolute Batman",
         "item_number": "1",
         "cover_image_url": "https://cdn.example/absolute-batman-1.jpg",
+        "thumbnail_image_url": "https://cdn.example/absolute-batman-1-thumb.jpg",
         "publisher": "DC",
         "release_year": 2024
       }
