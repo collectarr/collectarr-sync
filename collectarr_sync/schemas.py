@@ -46,6 +46,8 @@ class RejectedChange(BaseModel):
     entity_id: str
     reason: str
     current_client_changed_at: datetime | None = None
+    current_action: SyncAction | None = None
+    current_payload: dict[str, Any] | None = None
 
 
 class SyncPushResponse(BaseModel):

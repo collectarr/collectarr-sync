@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 
 from collectarr_sync.config import get_settings
 from collectarr_sync.db import CURRENT_SCHEMA_VERSION, initialize_database
@@ -27,6 +28,13 @@ async def lifespan(app: FastAPI):
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 async def require_sync_key(

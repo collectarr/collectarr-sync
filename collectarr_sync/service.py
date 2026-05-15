@@ -65,6 +65,8 @@ class SyncService:
                             entity_id=change.entity_id,
                             reason="server_has_newer_client_change",
                             current_client_changed_at=current_client_changed_at,
+                            current_action=current["action"],
+                            current_payload=json.loads(current["payload_json"]),
                         )
                     )
                     continue

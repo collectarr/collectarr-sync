@@ -199,6 +199,8 @@ async def test_stale_client_change_is_rejected(client, sync_headers):
     assert response.status_code == 200
     assert data["accepted"] == []
     assert data["rejected"][0]["reason"] == "server_has_newer_client_change"
+    assert data["rejected"][0]["current_action"] == "upsert"
+    assert data["rejected"][0]["current_payload"] == {"grade": "9.8"}
 
 
 @pytest.mark.asyncio

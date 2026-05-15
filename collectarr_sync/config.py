@@ -7,6 +7,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Collectarr Sync"
     environment: str = "development"
+    cors_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://localhost:8081",
+            "http://127.0.0.1:8081",
+        ]
+    )
     sync_database_path: str = "./collectarr-sync.db"
     sync_api_key: str = Field(default="collectarr-sync-dev-key")
     sync_change_retention_days: int = Field(default=90, ge=1)

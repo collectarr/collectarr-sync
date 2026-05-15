@@ -141,6 +141,11 @@ push is rejected because the service has a newer client timestamp, Flutter keeps
 the service version by default but can enqueue a fresh local retry from Settings
 when the local device should win.
 
+Rejected push responses include the service action and service payload that won
+the conflict. Flutter attaches the rejected local queued payload before showing
+the conflict review, so Settings can display a side-by-side local vs service
+diff without calling Collectarr Core.
+
 Full pulls return the current entity state only. Incremental pulls with `since` return both current entities changed since that timestamp and the ordered change records for that window.
 
 The append-only `changes` log is retained for `SYNC_CHANGE_RETENTION_DAYS` days, defaulting to 90. Pruned changes do not remove current entity state or delete tombstones.
