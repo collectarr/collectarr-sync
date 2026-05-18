@@ -30,17 +30,29 @@ That service is user-hosted and can expose the user's personal database to their
 ## Running Locally
 
 ```powershell
-Copy-Item .env.example .env
-docker compose --profile sync up --build sync
+$env:SYNC_API_KEY="collectarr-sync-dev-key"
+uvicorn collectarr_sync.main:app --host 0.0.0.0 --port 8020 --reload
 ```
 
-The service listens on http://localhost:8020 by default and stores data in the `sync_data` Docker volume. Requests to `/sync/*` require:
+The service listens on http://localhost:8020 by default and stores data in
+`./collectarr-sync.db`. Requests to `/sync/*` require:
 
 ```http
 X-Collectarr-Sync-Key: collectarr-sync-dev-key
 ```
 
 Change `SYNC_API_KEY` before exposing the service outside your local network.
+
+Docker run example:
+
+```powershell
+docker build -t collectarr-sync .
+docker run --rm -p 8020:8020 `
+  -e SYNC_API_KEY=collectarr-sync-dev-key `
+  -e SYNC_DATABASE_PATH=/data/collectarr-sync.db `
+  -v collectarr_sync_data:/data `
+  collectarr-sync
+```
 
 Flutter clients read the sync endpoint from Dart defines:
 
@@ -89,20 +101,20 @@ the central metadata server.
 Docker volume backup:
 
 ```powershell
-docker compose --profile sync stop sync
-docker compose --profile sync cp sync:/data ./collectarr-sync-data
+docker stop collectarr-sync
+docker run --rm -v collectarr_sync_data:/data -v ${PWD}:/backup alpine sh -c "cp -a /data /backup/collectarr-sync-data"
 Compress-Archive -Path .\collectarr-sync-data\* -DestinationPath .\collectarr-sync-data.zip -Force
-docker compose --profile sync start sync
+docker start collectarr-sync
 ```
 
 Docker volume restore:
 
 ```powershell
 Expand-Archive .\collectarr-sync-data.zip -DestinationPath .\collectarr-sync-data-restore -Force
-docker compose --profile sync stop sync
-docker compose --profile sync run --rm --entrypoint sh sync -lc "rm -rf /data/*"
-docker compose --profile sync cp ./collectarr-sync-data-restore/. sync:/data
-docker compose --profile sync start sync
+docker stop collectarr-sync
+docker run --rm -v collectarr_sync_data:/data alpine sh -c "rm -rf /data/*"
+docker run --rm -v collectarr_sync_data:/data -v ${PWD}/collectarr-sync-data-restore:/restore alpine sh -c "cp -a /restore/. /data/"
+docker start collectarr-sync
 ```
 
 Local SQLite backup:
