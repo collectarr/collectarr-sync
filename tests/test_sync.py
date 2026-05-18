@@ -115,6 +115,7 @@ async def test_sync_status_reports_counts(client, sync_headers):
 
     assert response.status_code == 200
     data = response.json()
+    assert data["protocol_version"] == 1
     assert data["schema_version"] == 1
     assert data["entity_count"] == 1
     assert data["tombstone_count"] == 0

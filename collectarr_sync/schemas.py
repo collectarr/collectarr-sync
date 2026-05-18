@@ -4,6 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 SyncAction = Literal["upsert", "delete"]
+SYNC_PROTOCOL_VERSION = 1
 
 
 def as_utc(value: datetime) -> datetime:
@@ -89,6 +90,7 @@ class SyncChangesResponse(BaseModel):
 
 class SyncStatusResponse(BaseModel):
     server_time: datetime
+    protocol_version: int
     schema_version: int
     entity_count: int
     tombstone_count: int

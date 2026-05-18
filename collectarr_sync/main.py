@@ -15,6 +15,7 @@ from collectarr_sync.schemas import (
     SyncPushRequest,
     SyncPushResponse,
     SyncStatusResponse,
+    SYNC_PROTOCOL_VERSION,
     as_utc,
 )
 from collectarr_sync.service import SyncService
@@ -52,7 +53,11 @@ SyncAuth = Annotated[None, Depends(require_sync_key)]
 
 @app.get("/health", tags=["system"])
 async def health() -> dict[str, str | int]:
-    return {"status": "ok", "schema_version": CURRENT_SCHEMA_VERSION}
+    return {
+        "status": "ok",
+        "protocol_version": SYNC_PROTOCOL_VERSION,
+        "schema_version": CURRENT_SCHEMA_VERSION,
+    }
 
 
 @app.get("/sync/status", response_model=SyncStatusResponse, tags=["sync"])

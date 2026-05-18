@@ -16,6 +16,7 @@ from collectarr_sync.schemas import (
     SyncPushRequest,
     SyncPushResponse,
     SyncStatusResponse,
+    SYNC_PROTOCOL_VERSION,
     SyncedEntity,
     as_utc,
 )
@@ -123,6 +124,7 @@ class SyncService:
             await connection.close()
         return SyncStatusResponse(
             server_time=server_time,
+            protocol_version=SYNC_PROTOCOL_VERSION,
             schema_version=schema_version,
             entity_count=entity_count,
             tombstone_count=tombstone_count,
