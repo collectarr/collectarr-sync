@@ -3,7 +3,23 @@
 Collectarr Sync is the optional personal sync service for Collectarr.
 
 It syncs local personal-library snapshots between a user's devices. It is not a
-metadata provider and does not own the canonical catalog.
+metadata provider and does not own the canonical catalog; shared metadata stays
+in `collectarr-core`, while the user's shelf state stays local-first in
+`collectarr-app`.
+
+## What It Does
+
+- Exposes authenticated sync push, pull, changes, status, and devices APIs.
+- Stores personal collection entities, catalog snapshots, tombstones, and a
+  bounded change log in SQLite.
+- Tracks sync protocol and schema versions so App can reason about compatible
+  clients.
+- Preserves device identity for multi-device sync and pairing flows.
+- Rejects stale local changes when another device has already written newer
+  state, then returns enough detail for App to review conflicts.
+- Reports service health, entity counts, tombstone counts, and retention
+  settings.
+- Documents backup and restore for the sync SQLite database and Docker volume.
 
 ## Development
 
@@ -31,15 +47,18 @@ docker run --rm -p 8020:8020 `
   collectarr-sync
 ```
 
+## Release Policy
+
+Release publishing is manual-only. This repository currently has CI for tests
+but no release publishing workflow. If a release workflow is added, it must use
+`workflow_dispatch`; pushing to `main` should run CI, not publish a GitHub
+Release or tag.
+
 ## Repository Boundary
 
-This repository owns:
-
-- sync push/pull/change APIs
-- sync storage
-- device identity and pairing protocol
-- tombstones and conflict handling
-- sync backup/restore docs
+This repository owns sync push/pull/change APIs, sync storage, device identity,
+pairing protocol support, tombstones, conflict handling, and sync backup/restore
+docs.
 
 Related repositories:
 
@@ -59,7 +78,6 @@ Near-term Sync work:
   and surface stale-client causes clearly
 - harden backup/restore around the SQLite database, WAL files, and service
   health checks
-- version the sync protocol and publish stable payload schemas for
-  `collectarr-app`
+- publish stable sync payload schemas for `collectarr-app`
 - keep the service intentionally personal-data-only; it should never fetch
   provider metadata or become a catalog mirror
