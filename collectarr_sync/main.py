@@ -70,6 +70,33 @@ async def sync_devices(_: SyncAuth) -> list[SyncDeviceResponse]:
     return await SyncService().devices()
 
 
+@app.delete("/sync/devices/{device_id}", tags=["sync"])
+async def remove_device(device_id: str, _: SyncAuth) -> dict[str, str | int]:
+    removed = await SyncService().remove_device(device_id)
+    if removed == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+    return {"status": "ok", "changes_removed": removed}
+
+
+@app.get("/sync/pairing-code", tags=["sync"])
+async def pairing_code(_: SyncAuth) -> dict[str, str | int]:
+    import json as _json
+
+    settings = get_settings()
+    code = _json.dumps(
+        {
+            "protocol_version": SYNC_PROTOCOL_VERSION,
+            "sync_base_url": f"http://localhost:8020",
+            "sync_key": settings.sync_api_key,
+        },
+        separators=(",", ":"),
+    )
+    return {"pairing_code": code, "protocol_version": SYNC_PROTOCOL_VERSION}
+
+
 @app.post("/sync/push", response_model=SyncPushResponse, tags=["sync"])
 async def push(payload: SyncPushRequest, _: SyncAuth) -> SyncPushResponse:
     return await SyncService().push(payload)

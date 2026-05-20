@@ -162,6 +162,19 @@ class SyncService:
             if row["first_seen_at"] and row["last_seen_at"]
         ]
 
+    async def remove_device(self, device_id: str) -> int:
+        connection = await connect()
+        try:
+            cursor = await connection.execute(
+                "delete from changes where device_id = ?",
+                (device_id,),
+            )
+            removed = cursor.rowcount
+            await connection.commit()
+        finally:
+            await connection.close()
+        return removed
+
     async def _accept_change(
         self,
         connection: aiosqlite.Connection,

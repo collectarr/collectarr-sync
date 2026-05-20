@@ -283,6 +283,216 @@ async def test_push_prunes_old_change_log_entries(client, sync_headers):
 
 
 @pytest.mark.asyncio
+async def test_multi_device_conflict_includes_service_state(client, sync_headers):
+    """Two devices push to the same entity; the stale write is rejected with
+    the server's current state for client-side diffing."""
+    # Device A pushes first
+    await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "device-A",
+            "changes": [
+                {
+                    "entity_type": "owned_item",
+                    "entity_id": "shared-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-06-01T10:00:00Z",
+                    "payload": {"grade": "9.0"},
+                }
+            ],
+        },
+    )
+
+    # Device B pushes with an OLDER client_changed_at → rejected
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "device-B",
+            "changes": [
+                {
+                    "entity_type": "owned_item",
+                    "entity_id": "shared-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-06-01T09:00:00Z",
+                    "payload": {"grade": "8.5"},
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["accepted"]) == 0
+    assert len(data["rejected"]) == 1
+
+    rejected = data["rejected"][0]
+    assert rejected["entity_id"] == "shared-1"
+    assert rejected["reason"] == "server_has_newer_client_change"
+    assert rejected["current_payload"]["grade"] == "9.0"
+    assert rejected["current_action"] == "upsert"
+
+
+@pytest.mark.asyncio
+async def test_retry_after_conflict_with_newer_timestamp(client, sync_headers):
+    """After a conflict, the client can retry with a newer timestamp to win."""
+    # Device A writes
+    await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "device-A",
+            "changes": [
+                {
+                    "entity_type": "owned_item",
+                    "entity_id": "retry-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-06-01T10:00:00Z",
+                    "payload": {"grade": "9.0"},
+                }
+            ],
+        },
+    )
+
+    # Device B retries with a NEWER timestamp → accepted
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "device-B",
+            "changes": [
+                {
+                    "entity_type": "owned_item",
+                    "entity_id": "retry-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-06-01T11:00:00Z",
+                    "payload": {"grade": "8.5"},
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["accepted"]) == 1
+    assert response.json()["accepted"][0]["payload"]["grade"] == "8.5"
+
+
+@pytest.mark.asyncio
+async def test_remove_device_clears_change_history(client, sync_headers):
+    # Push from a device
+    await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "old-phone",
+            "changes": [
+                {
+                    "entity_type": "owned_item",
+                    "entity_id": "phone-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-06-01T10:00:00Z",
+                    "payload": {"item_id": "comic-1"},
+                }
+            ],
+        },
+    )
+
+    # Verify device appears
+    devices = await client.get("/sync/devices", headers=sync_headers)
+    assert any(d["device_id"] == "old-phone" for d in devices.json())
+
+    # Remove device
+    response = await client.delete(
+        "/sync/devices/old-phone", headers=sync_headers
+    )
+    assert response.status_code == 200
+    assert response.json()["changes_removed"] == 1
+
+    # Device no longer appears
+    devices = await client.get("/sync/devices", headers=sync_headers)
+    assert not any(d["device_id"] == "old-phone" for d in devices.json())
+
+
+@pytest.mark.asyncio
+async def test_remove_unknown_device_returns_404(client, sync_headers):
+    response = await client.delete(
+        "/sync/devices/nonexistent", headers=sync_headers
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_pairing_code_includes_protocol_version(client, sync_headers):
+    import json
+
+    response = await client.get("/sync/pairing-code", headers=sync_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["protocol_version"] == 1
+
+    code = json.loads(data["pairing_code"])
+    assert code["protocol_version"] == 1
+    assert "sync_key" in code
+    assert "sync_base_url" in code
+
+
+@pytest.mark.asyncio
+async def test_health_reports_protocol_and_schema_version(client):
+    response = await client.get("/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["protocol_version"] == 1
+    assert data["schema_version"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_status_reports_entity_tombstone_change_counts(client, sync_headers):
+    # Push an upsert and a delete
+    await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "owned_item",
+                    "entity_id": "stat-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-06-01T10:00:00Z",
+                    "payload": {},
+                },
+                {
+                    "entity_type": "owned_item",
+                    "entity_id": "stat-2",
+                    "action": "delete",
+                    "client_changed_at": "2026-06-01T10:00:00Z",
+                    "payload": {},
+                },
+            ],
+        },
+    )
+
+    status_resp = await client.get("/sync/status", headers=sync_headers)
+    data = status_resp.json()
+    assert data["entity_count"] == 2
+    assert data["tombstone_count"] == 1
+    assert data["change_count"] == 2
+    assert data["retention_days"] == 90
+
+
+@pytest.mark.asyncio
+async def test_sync_key_must_be_non_default_in_production():
+    from collectarr_sync.config import Settings
+
+    with pytest.raises(ValueError, match="SYNC_API_KEY must be set"):
+        Settings(
+            environment="production",
+            sync_api_key="collectarr-sync-dev-key",
+        )
+
+
+@pytest.mark.asyncio
 async def test_pull_prunes_old_change_log_entries(client, sync_headers):
     connection = await connect()
     try:
