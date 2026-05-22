@@ -14,6 +14,8 @@ metadata, canonical catalog records, or image/provider ingest.
 - Basic API-key authentication exists.
 - Documentation explains the metadata-only Core boundary and local-first App
   model.
+- Generic entity-type sync payloads already support personal metadata alongside
+  owned/wishlist state, including synced location definitions.
 
 ## MVP Priorities
 
@@ -48,6 +50,14 @@ metadata, canonical catalog records, or image/provider ingest.
 ## Post-MVP
 
 - Optional per-user accounts if one Sync instance serves multiple people.
+  - If this lands, keep the single-user/self-host path simple; multi-user support should layer on top rather than complicate pairing for the common case.
+  - Scope accounts around isolated datasets, device ownership, and admin-only maintenance actions before expanding into richer auth UX.
 - Encrypted payload mode or pluggable secret handling.
+  - Prefer an additive mode where operators can choose envelope encryption or external secret providers without breaking the plain self-hosted path.
+  - Preserve conflict inspection/debuggability expectations; encrypted mode must still make restore and stale-write handling operable.
 - Retention policies for old changes/tombstones.
+  - Define retention separately for audit visibility, pull safety windows, and storage cleanup so old devices do not silently lose reconciliation context.
+  - Expose retention policy warnings in status/admin surfaces before destructive cleanup is enabled.
 - Export/import endpoint for full sync database snapshots.
+  - Treat this as a real migration/backup surface: include version metadata, integrity checks, and explicit restore warnings for stale clients.
+  - Keep snapshot export/import separate from the normal sync protocol so bulk recovery does not distort per-change conflict semantics.
