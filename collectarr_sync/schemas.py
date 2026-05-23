@@ -4,6 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 SyncAction = Literal["upsert", "delete"]
+TrackingSourceType = Literal["physical", "digital", "streaming"]
 SYNC_PROTOCOL_VERSION = 1
 
 
@@ -18,7 +19,7 @@ class TrackingEntryPayload(BaseModel):
     owned_item_id: str | None = Field(default=None, min_length=1, max_length=120)
     edition_id: str | None = Field(default=None, min_length=1, max_length=120)
     variant_id: str | None = Field(default=None, min_length=1, max_length=120)
-    source_type: str | None = Field(default=None, min_length=1, max_length=64)
+    source_type: TrackingSourceType | None = None
     status: str | None = Field(default=None, min_length=1, max_length=64)
     rating: int | None = Field(default=None, ge=0, le=10)
     started_at: datetime | None = None

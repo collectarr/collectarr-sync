@@ -123,6 +123,32 @@ async def test_push_rejects_invalid_tracking_entry_payload(client, sync_headers)
 
 
 @pytest.mark.asyncio
+async def test_push_rejects_unknown_tracking_source_type(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "tracking_entry",
+                    "entity_id": "tracking-2",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:05:00Z",
+                    "payload": {
+                        "item_id": "movie-1",
+                        "source_type": "kindle",
+                        "status": "Reading",
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_push_then_pull_returns_library_item_snapshot(client, sync_headers):
     response = await client.post(
         "/sync/push",
