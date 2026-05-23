@@ -89,7 +89,7 @@ async def pairing_code(_: SyncAuth) -> dict[str, str | int]:
     code = _json.dumps(
         {
             "protocol_version": SYNC_PROTOCOL_VERSION,
-            "sync_base_url": f"http://localhost:8020",
+            "sync_base_url": "http://localhost:8020",
             "sync_key": settings.sync_api_key,
         },
         separators=(",", ":"),
