@@ -13,6 +13,52 @@ def as_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
+class TrackingEntryPayload(BaseModel):
+    item_id: str = Field(min_length=1, max_length=120)
+    owned_item_id: str | None = Field(default=None, min_length=1, max_length=120)
+    edition_id: str | None = Field(default=None, min_length=1, max_length=120)
+    variant_id: str | None = Field(default=None, min_length=1, max_length=120)
+    source_type: str | None = Field(default=None, min_length=1, max_length=64)
+    status: str | None = Field(default=None, min_length=1, max_length=64)
+    rating: int | None = Field(default=None, ge=0, le=10)
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    progress_current: int | None = Field(default=None, ge=0)
+    progress_total: int | None = Field(default=None, ge=0)
+    times_completed: int | None = Field(default=None, ge=0)
+    notes: str | None = Field(default=None, max_length=4000)
+    season_number: int | None = Field(default=None, ge=0)
+    episode_number: int | None = Field(default=None, ge=0)
+
+    @field_validator("started_at", "finished_at")
+    @classmethod
+    def normalize_datetimes(cls, value: datetime | None) -> datetime | None:
+        return as_utc(value) if value else None
+
+    @field_validator("progress_total")
+    @classmethod
+    def validate_progress_total(cls, value: int | None) -> int | None:
+        if value == 0:
+            raise ValueError("progress_total must be greater than 0 when provided")
+        return value
+
+    @field_validator("finished_at")
+    @classmethod
+    def validate_finished_at(cls, value: datetime | None, info) -> datetime | None:
+        started_at = info.data.get("started_at")
+        if value and started_at and value < started_at:
+            raise ValueError("finished_at must not be earlier than started_at")
+        return value
+
+    @field_validator("progress_current")
+    @classmethod
+    def validate_progress_current(cls, value: int | None, info) -> int | None:
+        progress_total = info.data.get("progress_total")
+        if value is not None and progress_total is not None and value > progress_total:
+            raise ValueError("progress_current must not exceed progress_total")
+        return value
+
+
 class SyncChangeIn(BaseModel):
     entity_type: str = Field(min_length=1, max_length=80)
     entity_id: str = Field(min_length=1, max_length=120)
@@ -24,6 +70,14 @@ class SyncChangeIn(BaseModel):
     @classmethod
     def normalize_client_changed_at(cls, value: datetime) -> datetime:
         return as_utc(value)
+
+    @field_validator("payload")
+    @classmethod
+    def validate_payload_for_entity_type(cls, value: dict[str, Any], info) -> dict[str, Any]:
+        entity_type = info.data.get("entity_type")
+        if entity_type == "tracking_entry":
+            return TrackingEntryPayload.model_validate(value).model_dump(exclude_none=True)
+        return value
 
 
 class SyncPushRequest(BaseModel):

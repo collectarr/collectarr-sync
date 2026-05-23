@@ -158,6 +158,8 @@ the conflict. Flutter attaches the rejected local queued payload before showing
 the conflict review, so Settings can display a side-by-side local vs service
 diff without calling Collectarr Core.
 
+`tracking_entry` payloads are validated strictly by the sync service. The service currently enforces `item_id`, `rating` in the range 0-10, non-negative progress counters, `progress_total > 0` when present, `progress_current <= progress_total`, and `finished_at >= started_at`.
+
 Full pulls return the current entity state only. Incremental pulls with `since` return both current entities changed since that timestamp and the ordered change records for that window.
 
 The append-only `changes` log is retained for `SYNC_CHANGE_RETENTION_DAYS` days, defaulting to 90. Pruned changes do not remove current entity state or delete tombstones.
