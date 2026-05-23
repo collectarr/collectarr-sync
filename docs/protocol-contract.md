@@ -166,6 +166,7 @@ Lightweight change log without full entity snapshots.
 | Type | Description |
 |------|-------------|
 | `owned_item` | User's owned collection entry |
+| `tracking_entry` | User tracking state for owned or tracked-only items |
 | `wishlist_item` | Wishlist entry |
 | `library_item_snapshot` | Catalog metadata snapshot |
 | `note` | Personal notes on items |

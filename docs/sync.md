@@ -144,7 +144,7 @@ Suggested sync fields:
 - `device_id`: stable client installation identifier
 - `client_changed_at`: timestamp assigned by the client
 - `changed_at`: service timestamp assigned when a change is accepted
-- `entity_type`: `library_item_snapshot`, `owned_item`, `wishlist_item`, `note`, or future local entities
+- `entity_type`: `library_item_snapshot`, `owned_item`, `tracking_entry`, `wishlist_item`, `note`, or future local entities
 - `action`: `upsert` or `delete`
 - `payload`: entity-specific local data
 
@@ -208,6 +208,20 @@ The append-only `changes` log is retained for `SYNC_CHANGE_RETENTION_DAYS` days,
         "item_id": "comic-1",
         "condition": "Near Mint",
         "grade": "9.8"
+      }
+    },
+    {
+      "entity_type": "tracking_entry",
+      "entity_id": "tracking-1",
+      "action": "upsert",
+      "client_changed_at": "2026-05-11T10:05:00Z",
+      "payload": {
+        "item_id": "comic-1",
+        "source_type": "digital",
+        "status": "Completed",
+        "rating": 9,
+        "edition_id": "edition-deluxe",
+        "variant_id": "variant-1"
       }
     }
   ]

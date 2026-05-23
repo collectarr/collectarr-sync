@@ -55,6 +55,47 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
 
 
 @pytest.mark.asyncio
+async def test_push_then_pull_returns_tracking_entry(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "tracking_entry",
+                    "entity_id": "tracking-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:05:00Z",
+                    "payload": {
+                        "item_id": "movie-1",
+                        "source_type": "digital",
+                        "status": "Watching",
+                        "rating": 8,
+                        "edition_id": "edition-stream",
+                        "variant_id": "variant-4k"
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["accepted"]) == 1
+
+    pull = await client.post("/sync/pull", headers=sync_headers, json={})
+
+    assert pull.status_code == 200
+    entity = pull.json()["entities"][0]
+    assert entity["entity_type"] == "tracking_entry"
+    assert entity["entity_id"] == "tracking-1"
+    assert entity["payload"]["item_id"] == "movie-1"
+    assert entity["payload"]["source_type"] == "digital"
+    assert entity["payload"]["edition_id"] == "edition-stream"
+    assert entity["payload"]["variant_id"] == "variant-4k"
+
+
+@pytest.mark.asyncio
 async def test_push_then_pull_returns_library_item_snapshot(client, sync_headers):
     response = await client.post(
         "/sync/push",
