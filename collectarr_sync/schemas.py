@@ -1,10 +1,11 @@
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 SyncAction = Literal["upsert", "delete"]
 TrackingSourceType = Literal["physical", "digital", "streaming"]
+PersonalAnchorType = Literal["item", "variant", "bundle_release"]
 SYNC_PROTOCOL_VERSION = 1
 
 
@@ -60,6 +61,83 @@ class TrackingEntryPayload(BaseModel):
         return value
 
 
+class _PersonalEntityPayload(BaseModel):
+    item_id: str = Field(min_length=1, max_length=120)
+    anchor_type: PersonalAnchorType | None = None
+    edition_id: str | None = Field(default=None, min_length=1, max_length=120)
+    variant_id: str | None = Field(default=None, min_length=1, max_length=120)
+    bundle_release_id: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def validate_anchor_fields(self) -> "_PersonalEntityPayload":
+        if self.bundle_release_id:
+            if self.anchor_type not in (None, "bundle_release"):
+                raise ValueError(
+                    "bundle_release_id requires anchor_type 'bundle_release'"
+                )
+            self.anchor_type = "bundle_release"
+        if self.anchor_type == "bundle_release" and not self.bundle_release_id:
+            raise ValueError(
+                "bundle_release_id is required when anchor_type is 'bundle_release'"
+            )
+        if self.anchor_type == "variant" and not self.variant_id:
+            raise ValueError("variant_id is required when anchor_type is 'variant'")
+        return self
+
+
+class OwnedItemPayload(_PersonalEntityPayload):
+    condition: str | None = Field(default=None, min_length=1, max_length=120)
+    grade: str | None = Field(default=None, min_length=1, max_length=64)
+    purchase_date: datetime | None = None
+    price_paid_cents: int | None = Field(default=None, ge=0)
+    currency: str | None = Field(default=None, min_length=1, max_length=16)
+    personal_notes: str | None = Field(default=None, max_length=4000)
+    quantity: int = Field(default=1, ge=1)
+    storage_box: str | None = Field(default=None, max_length=120)
+    index_number: int | None = Field(default=None, ge=0)
+    cover_price_cents: int | None = Field(default=None, ge=0)
+    raw_or_slabbed: str | None = Field(default=None, max_length=64)
+    grading_company: str | None = Field(default=None, max_length=120)
+    grader_notes: str | None = Field(default=None, max_length=4000)
+    signed_by: str | None = Field(default=None, max_length=255)
+    key_comic: bool = False
+    key_reason: str | None = Field(default=None, max_length=4000)
+    rating: int | None = Field(default=None, ge=0, le=10)
+    read_status: str | None = Field(default=None, min_length=1, max_length=64)
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    tags: str | None = Field(default=None, max_length=1000)
+    sold_at: datetime | None = None
+    sell_price_cents: int | None = Field(default=None, ge=0)
+    sold_to: str | None = Field(default=None, max_length=255)
+    location_id: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @field_validator("purchase_date", "started_at", "finished_at", "sold_at")
+    @classmethod
+    def normalize_datetimes(cls, value: datetime | None) -> datetime | None:
+        return as_utc(value) if value else None
+
+    @field_validator("finished_at")
+    @classmethod
+    def validate_finished_at(cls, value: datetime | None, info) -> datetime | None:
+        started_at = info.data.get("started_at")
+        if value and started_at and value < started_at:
+            raise ValueError("finished_at must not be earlier than started_at")
+        return value
+
+
+class WishlistItemPayload(_PersonalEntityPayload):
+    target_price_cents: int | None = Field(default=None, ge=0)
+    currency: str | None = Field(default=None, min_length=1, max_length=16)
+    notes: str | None = Field(default=None, max_length=4000)
+    created_at: datetime | None = None
+
+    @field_validator("created_at")
+    @classmethod
+    def normalize_created_at(cls, value: datetime | None) -> datetime | None:
+        return as_utc(value) if value else None
+
+
 class SyncChangeIn(BaseModel):
     entity_type: str = Field(min_length=1, max_length=80)
     entity_id: str = Field(min_length=1, max_length=120)
@@ -78,6 +156,10 @@ class SyncChangeIn(BaseModel):
         entity_type = info.data.get("entity_type")
         if entity_type == "tracking_entry":
             return TrackingEntryPayload.model_validate(value).model_dump(exclude_none=True)
+        if entity_type == "owned_item":
+            return OwnedItemPayload.model_validate(value).model_dump(exclude_none=True)
+        if entity_type == "wishlist_item":
+            return WishlistItemPayload.model_validate(value).model_dump(exclude_none=True)
         return value
 
 

@@ -27,6 +27,8 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
                     "client_changed_at": "2026-05-11T10:00:00Z",
                     "payload": {
                         "item_id": "comic-1",
+                        "anchor_type": "bundle_release",
+                        "bundle_release_id": "bundle-1",
                         "condition": "Near Mint",
                         "grade": "9.8",
                     },
@@ -44,6 +46,8 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
     data = pull.json()
     assert data["entities"][0]["entity_id"] == "owned-1"
     assert data["entities"][0]["payload"]["grade"] == "9.8"
+    assert data["entities"][0]["payload"]["anchor_type"] == "bundle_release"
+    assert data["entities"][0]["payload"]["bundle_release_id"] == "bundle-1"
     assert data["changes"] == []
 
     incremental = await client.post(
@@ -184,6 +188,65 @@ async def test_push_then_pull_returns_library_item_snapshot(client, sync_headers
 
 
 @pytest.mark.asyncio
+async def test_push_then_pull_returns_wishlist_bundle_anchor(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "wishlist_item",
+                    "entity_id": "wish-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:00:00Z",
+                    "payload": {
+                        "item_id": "comic-1",
+                        "anchor_type": "bundle_release",
+                        "bundle_release_id": "bundle-42",
+                        "notes": "Want the slipcase",
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    pull = await client.post("/sync/pull", headers=sync_headers, json={})
+
+    assert pull.status_code == 200
+    entity = pull.json()["entities"][0]
+    assert entity["entity_type"] == "wishlist_item"
+    assert entity["payload"]["anchor_type"] == "bundle_release"
+    assert entity["payload"]["bundle_release_id"] == "bundle-42"
+
+
+@pytest.mark.asyncio
+async def test_push_rejects_bundle_anchor_without_bundle_release_id(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "owned_item",
+                    "entity_id": "owned-2",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:00:00Z",
+                    "payload": {
+                        "item_id": "comic-1",
+                        "anchor_type": "bundle_release",
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_sync_status_reports_counts(client, sync_headers):
     unauthorized = await client.get("/sync/status")
     assert unauthorized.status_code == 401
@@ -210,7 +273,7 @@ async def test_sync_status_reports_counts(client, sync_headers):
     assert response.status_code == 200
     data = response.json()
     assert data["protocol_version"] == 1
-    assert data["schema_version"] == 1
+    assert data["schema_version"] == 2
     assert data["entity_count"] == 1
     assert data["tombstone_count"] == 0
     assert data["change_count"] == 1

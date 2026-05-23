@@ -4,7 +4,7 @@ import aiosqlite
 
 from collectarr_sync.config import get_settings
 
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2
 
 
 async def connect() -> aiosqlite.Connection:
@@ -25,6 +25,9 @@ async def initialize_database() -> None:
         current_version = await _current_version(connection)
         if current_version < 1:
             await _migrate_to_v1(connection)
+            current_version = 1
+        if current_version < 2:
+            await _migrate_to_v2(connection)
         await connection.commit()
     finally:
         await connection.close()
@@ -80,3 +83,7 @@ async def _migrate_to_v1(connection: aiosqlite.Connection) -> None:
         insert into schema_migrations (version) values (1);
         """
     )
+
+
+async def _migrate_to_v2(connection: aiosqlite.Connection) -> None:
+    await connection.execute("insert into schema_migrations (version) values (2)")
