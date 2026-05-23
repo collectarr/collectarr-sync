@@ -1,9 +1,13 @@
 import os
+import sys
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from collectarr_sync.config import get_settings
 from collectarr_sync.db import initialize_database
