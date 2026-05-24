@@ -5,8 +5,35 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 SyncAction = Literal["upsert", "delete"]
 TrackingSourceType = Literal["physical", "digital", "streaming"]
-PersonalAnchorType = Literal["item", "variant", "bundle_release"]
+PersonalAnchorType = Literal["item", "edition", "variant", "bundle_release"]
 SYNC_PROTOCOL_VERSION = 1
+
+
+def _has_anchor_value(value: str | None) -> bool:
+    trimmed = value.strip() if value else ""
+    return bool(trimmed)
+
+
+def normalize_personal_anchor_type(value: str | None) -> PersonalAnchorType | None:
+    normalized = value.strip().lower() if isinstance(value, str) else None
+    if not normalized:
+        return None
+    if normalized in {"item", "media", "work"}:
+        return "item"
+    if normalized in {"edition", "release"}:
+        return "edition"
+    if normalized in {"variant", "physical_release", "physical-release"}:
+        return "variant"
+    if normalized in {
+        "bundle_release",
+        "bundle-release",
+        "bundle",
+        "package",
+        "box_set",
+        "box-set",
+    }:
+        return "bundle_release"
+    raise ValueError(f"Unsupported personal anchor type: {value}")
 
 
 def as_utc(value: datetime) -> datetime:
@@ -68,9 +95,18 @@ class _PersonalEntityPayload(BaseModel):
     variant_id: str | None = Field(default=None, min_length=1, max_length=120)
     bundle_release_id: str | None = Field(default=None, min_length=1, max_length=120)
 
+    @field_validator("anchor_type", mode="before")
+    @classmethod
+    def normalize_anchor_type(cls, value: str | None) -> PersonalAnchorType | None:
+        return normalize_personal_anchor_type(value)
+
     @model_validator(mode="after")
     def validate_anchor_fields(self) -> "_PersonalEntityPayload":
-        if self.bundle_release_id:
+        has_edition = _has_anchor_value(self.edition_id)
+        has_variant = _has_anchor_value(self.variant_id)
+        has_bundle_release = _has_anchor_value(self.bundle_release_id)
+
+        if has_bundle_release:
             if self.anchor_type not in (None, "bundle_release"):
                 raise ValueError(
                     "bundle_release_id requires anchor_type 'bundle_release'"
@@ -80,12 +116,31 @@ class _PersonalEntityPayload(BaseModel):
             raise ValueError(
                 "bundle_release_id is required when anchor_type is 'bundle_release'"
             )
-        if self.anchor_type == "variant" and not self.variant_id:
-            raise ValueError("variant_id is required when anchor_type is 'variant'")
+            return self
+
+        if has_variant:
+            self.anchor_type = "variant"
+            return self
+
+        if has_edition:
+            if self.anchor_type not in (None, "edition", "variant"):
+                raise ValueError(
+                    "edition_id is only compatible with anchor_type 'edition' or 'variant'"
+                )
+            self.anchor_type = "edition"
+            return self
+
+        if self.anchor_type == "edition":
+            raise ValueError("edition_id is required when anchor_type is 'edition'")
+        if self.anchor_type == "variant":
+            raise ValueError(
+                "variant_id or edition_id is required when anchor_type is 'variant'"
+            )
         return self
 
 
 class OwnedItemPayload(_PersonalEntityPayload):
+    is_digital: bool | None = None
     condition: str | None = Field(default=None, min_length=1, max_length=120)
     grade: str | None = Field(default=None, min_length=1, max_length=64)
     purchase_date: datetime | None = None
@@ -154,6 +209,9 @@ class SyncChangeIn(BaseModel):
     @classmethod
     def validate_payload_for_entity_type(cls, value: dict[str, Any], info) -> dict[str, Any]:
         entity_type = info.data.get("entity_type")
+        action = info.data.get("action")
+        if action == "delete":
+            return value
         if entity_type == "tracking_entry":
             return TrackingEntryPayload.model_validate(value).model_dump(exclude_none=True)
         if entity_type == "owned_item":

@@ -5,6 +5,12 @@ import pytest
 from collectarr_sync.db import connect
 
 
+def _owned_item_payload(**overrides):
+    payload = {"item_id": "comic-1", "quantity": 1, "key_comic": False}
+    payload.update(overrides)
+    return payload
+
+
 @pytest.mark.asyncio
 async def test_push_requires_sync_key(client):
     response = await client.post("/sync/push", json={"device_id": "desktop", "changes": []})
@@ -27,6 +33,7 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
                     "client_changed_at": "2026-05-11T10:00:00Z",
                     "payload": {
                         "item_id": "comic-1",
+                        "is_digital": True,
                         "anchor_type": "bundle_release",
                         "bundle_release_id": "bundle-1",
                         "condition": "Near Mint",
@@ -45,6 +52,7 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
     assert pull.status_code == 200
     data = pull.json()
     assert data["entities"][0]["entity_id"] == "owned-1"
+    assert data["entities"][0]["payload"]["is_digital"] is True
     assert data["entities"][0]["payload"]["grade"] == "9.8"
     assert data["entities"][0]["payload"]["anchor_type"] == "bundle_release"
     assert data["entities"][0]["payload"]["bundle_release_id"] == "bundle-1"
@@ -222,6 +230,42 @@ async def test_push_then_pull_returns_wishlist_bundle_anchor(client, sync_header
 
 
 @pytest.mark.asyncio
+async def test_push_normalizes_personal_anchor_to_edition_when_only_edition_id_exists(
+    client, sync_headers
+):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "owned_item",
+                    "entity_id": "owned-3",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:00:00Z",
+                    "payload": {
+                        "item_id": "comic-1",
+                        "anchor_type": "variant",
+                        "edition_id": "edition-deluxe",
+                        "condition": "Near Mint",
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    pull = await client.post("/sync/pull", headers=sync_headers, json={})
+
+    assert pull.status_code == 200
+    entity = pull.json()["entities"][0]
+    assert entity["payload"]["anchor_type"] == "edition"
+    assert entity["payload"]["edition_id"] == "edition-deluxe"
+    assert "variant_id" not in entity["payload"]
+
+
+@pytest.mark.asyncio
 async def test_push_rejects_bundle_anchor_without_bundle_release_id(client, sync_headers):
     response = await client.post(
         "/sync/push",
@@ -330,7 +374,7 @@ async def test_stale_client_change_is_rejected(client, sync_headers):
                     "entity_id": "owned-1",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T12:00:00Z",
-                    "payload": {"grade": "9.8"},
+                    "payload": _owned_item_payload(grade="9.8"),
                 }
             ],
         },
@@ -347,7 +391,7 @@ async def test_stale_client_change_is_rejected(client, sync_headers):
                     "entity_id": "owned-1",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T11:00:00Z",
-                    "payload": {"grade": "9.4"},
+                    "payload": _owned_item_payload(grade="9.4"),
                 }
             ],
         },
@@ -358,7 +402,7 @@ async def test_stale_client_change_is_rejected(client, sync_headers):
     assert data["accepted"] == []
     assert data["rejected"][0]["reason"] == "server_has_newer_client_change"
     assert data["rejected"][0]["current_action"] == "upsert"
-    assert data["rejected"][0]["current_payload"] == {"grade": "9.8"}
+    assert data["rejected"][0]["current_payload"] == _owned_item_payload(grade="9.8")
 
 
 @pytest.mark.asyncio
@@ -455,7 +499,7 @@ async def test_multi_device_conflict_includes_service_state(client, sync_headers
                     "entity_id": "shared-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": {"grade": "9.0"},
+                    "payload": _owned_item_payload(grade="9.0"),
                 }
             ],
         },
@@ -473,7 +517,7 @@ async def test_multi_device_conflict_includes_service_state(client, sync_headers
                     "entity_id": "shared-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T09:00:00Z",
-                    "payload": {"grade": "8.5"},
+                    "payload": _owned_item_payload(grade="8.5"),
                 }
             ],
         },
@@ -488,6 +532,7 @@ async def test_multi_device_conflict_includes_service_state(client, sync_headers
     assert rejected["entity_id"] == "shared-1"
     assert rejected["reason"] == "server_has_newer_client_change"
     assert rejected["current_payload"]["grade"] == "9.0"
+    assert rejected["current_payload"]["item_id"] == "comic-1"
     assert rejected["current_action"] == "upsert"
 
 
@@ -506,7 +551,7 @@ async def test_retry_after_conflict_with_newer_timestamp(client, sync_headers):
                     "entity_id": "retry-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": {"grade": "9.0"},
+                    "payload": _owned_item_payload(grade="9.0"),
                 }
             ],
         },
@@ -524,7 +569,7 @@ async def test_retry_after_conflict_with_newer_timestamp(client, sync_headers):
                     "entity_id": "retry-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T11:00:00Z",
-                    "payload": {"grade": "8.5"},
+                    "payload": _owned_item_payload(grade="8.5"),
                 }
             ],
         },
@@ -617,7 +662,7 @@ async def test_status_reports_entity_tombstone_change_counts(client, sync_header
                     "entity_id": "stat-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": {},
+                    "payload": _owned_item_payload(),
                 },
                 {
                     "entity_type": "owned_item",
