@@ -5,6 +5,12 @@ import pytest
 from collectarr_sync.db import connect
 
 
+def _owned_item_payload(**overrides):
+    payload = {"item_id": "comic-1", "quantity": 1, "key_comic": False}
+    payload.update(overrides)
+    return payload
+
+
 @pytest.mark.asyncio
 async def test_push_requires_sync_key(client):
     response = await client.post("/sync/push", json={"device_id": "desktop", "changes": []})
@@ -27,6 +33,9 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
                     "client_changed_at": "2026-05-11T10:00:00Z",
                     "payload": {
                         "item_id": "comic-1",
+                        "is_digital": True,
+                        "anchor_type": "bundle_release",
+                        "bundle_release_id": "bundle-1",
                         "condition": "Near Mint",
                         "grade": "9.8",
                     },
@@ -43,7 +52,10 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
     assert pull.status_code == 200
     data = pull.json()
     assert data["entities"][0]["entity_id"] == "owned-1"
+    assert data["entities"][0]["payload"]["is_digital"] is True
     assert data["entities"][0]["payload"]["grade"] == "9.8"
+    assert data["entities"][0]["payload"]["anchor_type"] == "bundle_release"
+    assert data["entities"][0]["payload"]["bundle_release_id"] == "bundle-1"
     assert data["changes"] == []
 
     incremental = await client.post(
@@ -52,6 +64,151 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
         json={"since": "2026-05-11T00:00:00Z"},
     )
     assert incremental.json()["changes"][0]["device_id"] == "desktop"
+
+
+@pytest.mark.asyncio
+async def test_push_then_pull_returns_tracking_entry(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "tracking_entry",
+                    "entity_id": "tracking-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:05:00Z",
+                    "payload": {
+                        "item_id": "movie-1",
+                        "source_type": "digital",
+                        "status": "Watching",
+                        "rating": 8,
+                        "edition_id": "edition-stream",
+                        "variant_id": "variant-4k"
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["accepted"]) == 1
+
+    pull = await client.post("/sync/pull", headers=sync_headers, json={})
+
+    assert pull.status_code == 200
+    entity = pull.json()["entities"][0]
+    assert entity["entity_type"] == "tracking_entry"
+    assert entity["entity_id"] == "tracking-1"
+    assert entity["payload"]["item_id"] == "movie-1"
+    assert entity["payload"]["source_type"] == "digital"
+    assert entity["payload"]["edition_id"] == "edition-stream"
+    assert entity["payload"]["variant_id"] == "variant-4k"
+
+
+@pytest.mark.asyncio
+async def test_push_rejects_invalid_tracking_entry_payload(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "tracking_entry",
+                    "entity_id": "tracking-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:05:00Z",
+                    "payload": {
+                        "item_id": "movie-1",
+                        "rating": 11,
+                        "progress_current": 8,
+                        "progress_total": 4
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_push_rejects_tracking_entry_progress_above_total(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "tracking_entry",
+                    "entity_id": "tracking-progress",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:05:00Z",
+                    "payload": {
+                        "item_id": "movie-1",
+                        "rating": 8,
+                        "progress_current": 8,
+                        "progress_total": 4,
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_push_allows_tracking_entry_delete_with_empty_payload(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "tracking_entry",
+                    "entity_id": "tracking-delete",
+                    "action": "delete",
+                    "client_changed_at": "2026-05-11T10:05:00Z",
+                    "payload": {},
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["accepted"][0]["entity_id"] == "tracking-delete"
+    assert response.json()["accepted"][0]["action"] == "delete"
+
+
+@pytest.mark.asyncio
+async def test_push_rejects_unknown_tracking_source_type(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "tracking_entry",
+                    "entity_id": "tracking-2",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:05:00Z",
+                    "payload": {
+                        "item_id": "movie-1",
+                        "source_type": "kindle",
+                        "status": "Reading",
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -90,6 +247,101 @@ async def test_push_then_pull_returns_library_item_snapshot(client, sync_headers
 
 
 @pytest.mark.asyncio
+async def test_push_then_pull_returns_wishlist_bundle_anchor(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "wishlist_item",
+                    "entity_id": "wish-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:00:00Z",
+                    "payload": {
+                        "item_id": "comic-1",
+                        "anchor_type": "bundle_release",
+                        "bundle_release_id": "bundle-42",
+                        "notes": "Want the slipcase",
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    pull = await client.post("/sync/pull", headers=sync_headers, json={})
+
+    assert pull.status_code == 200
+    entity = pull.json()["entities"][0]
+    assert entity["entity_type"] == "wishlist_item"
+    assert entity["payload"]["anchor_type"] == "bundle_release"
+    assert entity["payload"]["bundle_release_id"] == "bundle-42"
+
+
+@pytest.mark.asyncio
+async def test_push_normalizes_personal_anchor_to_edition_when_only_edition_id_exists(
+    client, sync_headers
+):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "owned_item",
+                    "entity_id": "owned-3",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:00:00Z",
+                    "payload": {
+                        "item_id": "comic-1",
+                        "anchor_type": "variant",
+                        "edition_id": "edition-deluxe",
+                        "condition": "Near Mint",
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    pull = await client.post("/sync/pull", headers=sync_headers, json={})
+
+    assert pull.status_code == 200
+    entity = pull.json()["entities"][0]
+    assert entity["payload"]["anchor_type"] == "edition"
+    assert entity["payload"]["edition_id"] == "edition-deluxe"
+    assert "variant_id" not in entity["payload"]
+
+
+@pytest.mark.asyncio
+async def test_push_rejects_bundle_anchor_without_bundle_release_id(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "owned_item",
+                    "entity_id": "owned-2",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:00:00Z",
+                    "payload": {
+                        "item_id": "comic-1",
+                        "anchor_type": "bundle_release",
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_sync_status_reports_counts(client, sync_headers):
     unauthorized = await client.get("/sync/status")
     assert unauthorized.status_code == 401
@@ -116,7 +368,7 @@ async def test_sync_status_reports_counts(client, sync_headers):
     assert response.status_code == 200
     data = response.json()
     assert data["protocol_version"] == 1
-    assert data["schema_version"] == 1
+    assert data["schema_version"] == 2
     assert data["entity_count"] == 1
     assert data["tombstone_count"] == 0
     assert data["change_count"] == 1
@@ -173,7 +425,7 @@ async def test_stale_client_change_is_rejected(client, sync_headers):
                     "entity_id": "owned-1",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T12:00:00Z",
-                    "payload": {"grade": "9.8"},
+                    "payload": _owned_item_payload(grade="9.8"),
                 }
             ],
         },
@@ -190,7 +442,7 @@ async def test_stale_client_change_is_rejected(client, sync_headers):
                     "entity_id": "owned-1",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T11:00:00Z",
-                    "payload": {"grade": "9.4"},
+                    "payload": _owned_item_payload(grade="9.4"),
                 }
             ],
         },
@@ -201,7 +453,7 @@ async def test_stale_client_change_is_rejected(client, sync_headers):
     assert data["accepted"] == []
     assert data["rejected"][0]["reason"] == "server_has_newer_client_change"
     assert data["rejected"][0]["current_action"] == "upsert"
-    assert data["rejected"][0]["current_payload"] == {"grade": "9.8"}
+    assert data["rejected"][0]["current_payload"] == _owned_item_payload(grade="9.8")
 
 
 @pytest.mark.asyncio
@@ -298,7 +550,7 @@ async def test_multi_device_conflict_includes_service_state(client, sync_headers
                     "entity_id": "shared-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": {"grade": "9.0"},
+                    "payload": _owned_item_payload(grade="9.0"),
                 }
             ],
         },
@@ -316,7 +568,7 @@ async def test_multi_device_conflict_includes_service_state(client, sync_headers
                     "entity_id": "shared-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T09:00:00Z",
-                    "payload": {"grade": "8.5"},
+                    "payload": _owned_item_payload(grade="8.5"),
                 }
             ],
         },
@@ -331,6 +583,7 @@ async def test_multi_device_conflict_includes_service_state(client, sync_headers
     assert rejected["entity_id"] == "shared-1"
     assert rejected["reason"] == "server_has_newer_client_change"
     assert rejected["current_payload"]["grade"] == "9.0"
+    assert rejected["current_payload"]["item_id"] == "comic-1"
     assert rejected["current_action"] == "upsert"
 
 
@@ -349,7 +602,7 @@ async def test_retry_after_conflict_with_newer_timestamp(client, sync_headers):
                     "entity_id": "retry-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": {"grade": "9.0"},
+                    "payload": _owned_item_payload(grade="9.0"),
                 }
             ],
         },
@@ -367,7 +620,7 @@ async def test_retry_after_conflict_with_newer_timestamp(client, sync_headers):
                     "entity_id": "retry-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T11:00:00Z",
-                    "payload": {"grade": "8.5"},
+                    "payload": _owned_item_payload(grade="8.5"),
                 }
             ],
         },
@@ -460,7 +713,7 @@ async def test_status_reports_entity_tombstone_change_counts(client, sync_header
                     "entity_id": "stat-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": {},
+                    "payload": _owned_item_payload(),
                 },
                 {
                     "entity_type": "owned_item",
