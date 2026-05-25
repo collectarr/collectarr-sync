@@ -83,3 +83,9 @@ Near-term Sync work:
 - publish stable sync payload schemas for `collectarr-app`
 - keep the service intentionally personal-data-only; it should never fetch
   provider metadata or become a catalog mirror
+
+---
+
+## Support
+
+If Collectarr is useful to you, you can support ongoing development on [Ko-fi](https://ko-fi.com/saitatter).
