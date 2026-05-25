@@ -52,8 +52,8 @@ class TrackingEntryPayload(BaseModel):
     rating: int | None = Field(default=None, ge=0, le=10)
     started_at: datetime | None = None
     finished_at: datetime | None = None
-    progress_current: int | None = Field(default=None, ge=0)
     progress_total: int | None = Field(default=None, ge=0)
+    progress_current: int | None = Field(default=None, ge=0)
     times_completed: int | None = Field(default=None, ge=0)
     notes: str | None = Field(default=None, max_length=4000)
     season_number: int | None = Field(default=None, ge=0)

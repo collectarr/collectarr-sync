@@ -135,6 +135,57 @@ async def test_push_rejects_invalid_tracking_entry_payload(client, sync_headers)
 
 
 @pytest.mark.asyncio
+async def test_push_rejects_tracking_entry_progress_above_total(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "tracking_entry",
+                    "entity_id": "tracking-progress",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:05:00Z",
+                    "payload": {
+                        "item_id": "movie-1",
+                        "rating": 8,
+                        "progress_current": 8,
+                        "progress_total": 4,
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_push_allows_tracking_entry_delete_with_empty_payload(client, sync_headers):
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "tracking_entry",
+                    "entity_id": "tracking-delete",
+                    "action": "delete",
+                    "client_changed_at": "2026-05-11T10:05:00Z",
+                    "payload": {},
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["accepted"][0]["entity_id"] == "tracking-delete"
+    assert response.json()["accepted"][0]["action"] == "delete"
+
+
+@pytest.mark.asyncio
 async def test_push_rejects_unknown_tracking_source_type(client, sync_headers):
     response = await client.post(
         "/sync/push",
