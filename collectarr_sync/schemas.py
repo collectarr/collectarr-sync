@@ -116,7 +116,6 @@ class _PersonalEntityPayload(BaseModel):
             raise ValueError(
                 "bundle_release_id is required when anchor_type is 'bundle_release'"
             )
-            return self
 
         if has_variant:
             self.anchor_type = "variant"
