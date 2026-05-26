@@ -44,7 +44,9 @@ class SyncService:
     def reset_prune_state_for_testing(cls) -> None:
         cls._last_pruned_at = None
 
-    async def push(self, request: SyncPushRequest) -> SyncPushResponse:
+    async def push(
+        self, request: SyncPushRequest, *, user_id: str = ""
+    ) -> SyncPushResponse:
         server_time = utc_now()
         accepted: list[SyncChangeOut] = []
         rejected: list[RejectedChange] = []
@@ -77,6 +79,7 @@ class SyncService:
                     device_id=request.device_id,
                     change=change,
                     changed_at=server_time,
+                    user_id=user_id,
                 )
                 accepted.append(accepted_change)
 
@@ -88,25 +91,33 @@ class SyncService:
 
         return SyncPushResponse(server_time=server_time, accepted=accepted, rejected=rejected)
 
-    async def pull(self, since: datetime | None) -> SyncPullResponse:
+    async def pull(
+        self, since: datetime | None, *, user_id: str = ""
+    ) -> SyncPullResponse:
         server_time = utc_now()
         connection = await connect()
         try:
             if await self._prune_changes_if_due(connection, server_time):
                 await connection.commit()
-            entities = await self._list_entities(connection, since)
-            changes = await self._list_changes(connection, since) if since else []
+            entities = await self._list_entities(connection, since, user_id=user_id)
+            changes = (
+                await self._list_changes(connection, since, user_id=user_id)
+                if since
+                else []
+            )
         finally:
             await connection.close()
         return SyncPullResponse(server_time=server_time, entities=entities, changes=changes)
 
-    async def changes(self, since: datetime | None) -> SyncChangesResponse:
+    async def changes(
+        self, since: datetime | None, *, user_id: str = ""
+    ) -> SyncChangesResponse:
         server_time = utc_now()
         connection = await connect()
         try:
             if await self._prune_changes_if_due(connection, server_time):
                 await connection.commit()
-            changes = await self._list_changes(connection, since)
+            changes = await self._list_changes(connection, since, user_id=user_id)
         finally:
             await connection.close()
         return SyncChangesResponse(server_time=server_time, changes=changes)
@@ -181,6 +192,8 @@ class SyncService:
         device_id: str,
         change: SyncChangeIn,
         changed_at: datetime,
+        *,
+        user_id: str = "",
     ) -> SyncChangeOut:
         change_id = str(uuid.uuid4())
         payload_json = json.dumps(change.payload, separators=(",", ":"), sort_keys=True)
@@ -189,16 +202,17 @@ class SyncService:
             """
             insert into entities (
               entity_type, entity_id, action, payload_json, source_device_id,
-              client_changed_at, changed_at, deleted_at
+              client_changed_at, changed_at, deleted_at, user_id
             )
-            values (?, ?, ?, ?, ?, ?, ?, ?)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?)
             on conflict(entity_type, entity_id) do update set
               action = excluded.action,
               payload_json = excluded.payload_json,
               source_device_id = excluded.source_device_id,
               client_changed_at = excluded.client_changed_at,
               changed_at = excluded.changed_at,
-              deleted_at = excluded.deleted_at
+              deleted_at = excluded.deleted_at,
+              user_id = excluded.user_id
             """,
             (
                 change.entity_type,
@@ -209,15 +223,16 @@ class SyncService:
                 iso(change.client_changed_at),
                 iso(changed_at),
                 deleted_at,
+                user_id,
             ),
         )
         await connection.execute(
             """
             insert into changes (
               id, entity_type, entity_id, action, payload_json, device_id,
-              client_changed_at, changed_at
+              client_changed_at, changed_at, user_id
             )
-            values (?, ?, ?, ?, ?, ?, ?, ?)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 change_id,
@@ -228,6 +243,7 @@ class SyncService:
                 device_id,
                 iso(change.client_changed_at),
                 iso(changed_at),
+                user_id,
             ),
         )
         return SyncChangeOut(
@@ -304,44 +320,56 @@ class SyncService:
         return parse_dt(row["changed_at"]) if row["changed_at"] else None
 
     async def _list_entities(
-        self, connection: aiosqlite.Connection, since: datetime | None
+        self,
+        connection: aiosqlite.Connection,
+        since: datetime | None,
+        *,
+        user_id: str = "",
     ) -> list[SyncedEntity]:
         if since:
             cursor = await connection.execute(
                 """
                 select * from entities
-                where changed_at > ?
+                where changed_at > ? and user_id = ?
                 order by changed_at, entity_type, entity_id
                 """,
-                (iso(since),),
+                (iso(since), user_id),
             )
         else:
             cursor = await connection.execute(
                 """
                 select * from entities
+                where user_id = ?
                 order by changed_at, entity_type, entity_id
-                """
+                """,
+                (user_id,),
             )
         return [self._entity_from_row(row) for row in await cursor.fetchall()]
 
     async def _list_changes(
-        self, connection: aiosqlite.Connection, since: datetime | None
+        self,
+        connection: aiosqlite.Connection,
+        since: datetime | None,
+        *,
+        user_id: str = "",
     ) -> list[SyncChangeOut]:
         if since:
             cursor = await connection.execute(
                 """
                 select * from changes
-                where changed_at > ?
+                where changed_at > ? and user_id = ?
                 order by changed_at, id
                 """,
-                (iso(since),),
+                (iso(since), user_id),
             )
         else:
             cursor = await connection.execute(
                 """
                 select * from changes
+                where user_id = ?
                 order by changed_at, id
-                """
+                """,
+                (user_id,),
             )
         return [self._change_from_row(row) for row in await cursor.fetchall()]
 

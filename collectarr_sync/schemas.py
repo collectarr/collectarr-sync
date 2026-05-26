@@ -165,6 +165,9 @@ class OwnedItemPayload(_PersonalEntityPayload):
     sell_price_cents: int | None = Field(default=None, ge=0)
     sold_to: str | None = Field(default=None, max_length=255)
     location_id: str | None = Field(default=None, min_length=1, max_length=120)
+    purchase_store: str | None = Field(default=None, max_length=255)
+    box_set_id: str | None = Field(default=None, min_length=1, max_length=120)
+    box_set_name: str | None = Field(default=None, max_length=255)
 
     @field_validator("purchase_date", "started_at", "finished_at", "sold_at")
     @classmethod
@@ -192,6 +195,41 @@ class WishlistItemPayload(_PersonalEntityPayload):
         return as_utc(value) if value else None
 
 
+class WatchSessionPayload(BaseModel):
+    item_id: str = Field(min_length=1, max_length=120)
+    tracking_entry_id: str | None = Field(default=None, min_length=1, max_length=120)
+    season_number: int | None = Field(default=None, ge=0)
+    episode_number: int | None = Field(default=None, ge=0)
+    source_type: TrackingSourceType | None = None
+    watched_at: datetime
+    rating: int | None = Field(default=None, ge=0, le=10)
+    notes: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("watched_at")
+    @classmethod
+    def normalize_watched_at(cls, value: datetime) -> datetime:
+        return as_utc(value)
+
+
+class MetadataOverridePayload(BaseModel):
+    item_id: str = Field(min_length=1, max_length=120)
+    edition_id: str | None = Field(default=None, min_length=1, max_length=120)
+    variant_id: str | None = Field(default=None, min_length=1, max_length=120)
+    field_path: str = Field(min_length=1, max_length=255)
+    original_value: str | None = Field(default=None, max_length=8000)
+    override_value: str = Field(min_length=0, max_length=8000)
+
+
+class CustomEpisodePayload(BaseModel):
+    item_id: str = Field(min_length=1, max_length=120)
+    season_number: int = Field(ge=0, le=9999)
+    episode_number: int = Field(ge=0, le=99999)
+    title: str = Field(min_length=1, max_length=500)
+    overview: str | None = Field(default=None, max_length=8000)
+    air_date: str | None = Field(default=None, max_length=30)
+    runtime_minutes: int | None = Field(default=None, ge=0, le=99999)
+
+
 class SyncChangeIn(BaseModel):
     entity_type: str = Field(min_length=1, max_length=80)
     entity_id: str = Field(min_length=1, max_length=120)
@@ -217,6 +255,12 @@ class SyncChangeIn(BaseModel):
             return OwnedItemPayload.model_validate(value).model_dump(exclude_none=True)
         if entity_type == "wishlist_item":
             return WishlistItemPayload.model_validate(value).model_dump(exclude_none=True)
+        if entity_type == "watch_session":
+            return WatchSessionPayload.model_validate(value).model_dump(exclude_none=True)
+        if entity_type == "metadata_override":
+            return MetadataOverridePayload.model_validate(value).model_dump(exclude_none=True)
+        if entity_type == "custom_episode":
+            return CustomEpisodePayload.model_validate(value).model_dump(exclude_none=True)
         return value
 
 
