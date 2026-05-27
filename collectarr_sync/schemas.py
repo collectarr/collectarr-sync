@@ -168,8 +168,11 @@ class OwnedItemPayload(_PersonalEntityPayload):
     purchase_store: str | None = Field(default=None, max_length=255)
     box_set_id: str | None = Field(default=None, min_length=1, max_length=120)
     box_set_name: str | None = Field(default=None, max_length=255)
+    collection_status: str | None = Field(default=None, max_length=64)
+    last_bag_board_date: datetime | None = None
+    market_value_cents: int | None = Field(default=None, ge=0)
 
-    @field_validator("purchase_date", "started_at", "finished_at", "sold_at")
+    @field_validator("purchase_date", "started_at", "finished_at", "sold_at", "last_bag_board_date")
     @classmethod
     def normalize_datetimes(cls, value: datetime | None) -> datetime | None:
         return as_utc(value) if value else None
@@ -230,6 +233,13 @@ class CustomEpisodePayload(BaseModel):
     runtime_minutes: int | None = Field(default=None, ge=0, le=99999)
 
 
+class PickListValuePayload(BaseModel):
+    list_name: str = Field(min_length=1, max_length=120)
+    media_kind: str | None = Field(default=None, max_length=64)
+    value: str = Field(min_length=1, max_length=500)
+    sort_order: int = Field(default=0, ge=0)
+
+
 class SyncChangeIn(BaseModel):
     entity_type: str = Field(min_length=1, max_length=80)
     entity_id: str = Field(min_length=1, max_length=120)
@@ -261,6 +271,8 @@ class SyncChangeIn(BaseModel):
             return MetadataOverridePayload.model_validate(value).model_dump(exclude_none=True)
         if entity_type == "custom_episode":
             return CustomEpisodePayload.model_validate(value).model_dump(exclude_none=True)
+        if entity_type == "pick_list_value":
+            return PickListValuePayload.model_validate(value).model_dump(exclude_none=True)
         return value
 
 
