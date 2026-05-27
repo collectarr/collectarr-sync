@@ -4,7 +4,7 @@ import aiosqlite
 
 from collectarr_sync.config import get_settings
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 
 async def connect() -> aiosqlite.Connection:
@@ -28,6 +28,9 @@ async def initialize_database() -> None:
             current_version = 1
         if current_version < 2:
             await _migrate_to_v2(connection)
+            current_version = 2
+        if current_version < 3:
+            await _migrate_to_v3(connection)
         await connection.commit()
     finally:
         await connection.close()
@@ -87,3 +90,18 @@ async def _migrate_to_v1(connection: aiosqlite.Connection) -> None:
 
 async def _migrate_to_v2(connection: aiosqlite.Connection) -> None:
     await connection.execute("insert into schema_migrations (version) values (2)")
+
+
+async def _migrate_to_v3(connection: aiosqlite.Connection) -> None:
+    """Add user_id column to entities and changes for multi-user sync."""
+    await connection.executescript(
+        """
+        alter table entities add column user_id text not null default '';
+        alter table changes add column user_id text not null default '';
+
+        create index ix_entities_user on entities (user_id);
+        create index ix_changes_user on changes (user_id);
+
+        insert into schema_migrations (version) values (3);
+        """
+    )

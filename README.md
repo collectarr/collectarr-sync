@@ -49,10 +49,12 @@ docker run --rm -p 8020:8020 `
 
 ## Release Policy
 
-Release publishing is manual-only. This repository currently has CI for tests
-but no release publishing workflow. If a release workflow is added, it must use
-`workflow_dispatch`; pushing to `main` should run CI, not publish a GitHub
-Release or tag.
+Release publishing is manual-only. The `Release` GitHub Actions workflow uses
+`workflow_dispatch`; pushing to `main` runs CI only.
+
+When a releasable version is detected, the workflow publishes a GitHub Release
+and pushes the sync container image to `ghcr.io/collectarr/collectarr-sync`
+with both the semantic version tag and `latest`.
 
 ## Repository Boundary
 
