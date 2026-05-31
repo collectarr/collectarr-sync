@@ -147,7 +147,6 @@ class OwnedItemPayload(_PersonalEntityPayload):
     currency: str | None = Field(default=None, min_length=1, max_length=16)
     personal_notes: str | None = Field(default=None, max_length=4000)
     quantity: int = Field(default=1, ge=1)
-    storage_box: str | None = Field(default=None, max_length=120)
     index_number: int | None = Field(default=None, ge=0)
     cover_price_cents: int | None = Field(default=None, ge=0)
     raw_or_slabbed: str | None = Field(default=None, max_length=64)
@@ -205,6 +204,7 @@ class WatchSessionPayload(BaseModel):
     episode_number: int | None = Field(default=None, ge=0)
     source_type: TrackingSourceType | None = None
     watched_at: datetime
+    seen_where: str | None = Field(default=None, max_length=255)
     rating: int | None = Field(default=None, ge=0, le=10)
     notes: str | None = Field(default=None, max_length=4000)
 
