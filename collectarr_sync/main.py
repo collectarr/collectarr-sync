@@ -35,7 +35,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_origin_regex=(
-        r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+        r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$"
         if settings.environment == "development"
         else None
     ),
