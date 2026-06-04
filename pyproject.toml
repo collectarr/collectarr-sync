@@ -2,7 +2,7 @@
 name = "collectarr-sync"
 version = "1.0.0"
 description = "Self-hosted personal collection sync service for Collectarr clients"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "aiosqlite>=0.20.0",
     "fastapi>=0.115.0",
@@ -30,7 +30,7 @@ include = ["collectarr_sync*"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py314"
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
