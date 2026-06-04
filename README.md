@@ -123,6 +123,11 @@ with both the semantic version tag and `latest`.
 | `collectarr-app` | Flutter client that owns local-first shelf state and conflict review UX |
 | `collectarr-core` | Canonical metadata catalog, provider ingest, and admin server |
 
+## 🧭 Library Parity Contract
+
+See [docs/library-parity-contract.md](docs/library-parity-contract.md) for Sync
+compatibility guarantees against the shared Core contract.
+
 ## 🗺️ Current Focus
 
 See [docs/implementation-plan.md](docs/implementation-plan.md) for the active
