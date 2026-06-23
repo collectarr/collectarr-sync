@@ -8,6 +8,15 @@ on:
         required: false
         default: false
         type: boolean
+      force_publish_existing:
+        description: Push containers for an existing release version without creating a new GitHub release
+        required: false
+        default: false
+        type: boolean
+      release_version:
+        description: Existing release version without leading v (required when force_publish_existing is true)
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -48,7 +57,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify sync package version matches release version
-        if: steps.semantic_preview.outputs.new_release_published == 'true' && !inputs.build_only
+        if: steps.semantic_preview.outputs.new_release_published == 'true' && !inputs.build_only && !inputs.force_publish_existing
         shell: bash
         run: |
           expected="${{ steps.semantic_preview.outputs.new_release_version }}"
@@ -66,6 +75,15 @@ jobs:
             echo "build_requested=true" >> "$GITHUB_OUTPUT"
             echo "publish_release=false" >> "$GITHUB_OUTPUT"
             echo "image_tag=build-only-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.force_publish_existing }}" = "true" ]; then
+            version="${{ inputs.release_version }}"
+            if [ -z "$version" ]; then
+              echo "::error title=Missing release version::Set release_version when force_publish_existing is true."
+              exit 1
+            fi
+            echo "build_requested=true" >> "$GITHUB_OUTPUT"
+            echo "publish_release=true" >> "$GITHUB_OUTPUT"
+            echo "image_tag=$version" >> "$GITHUB_OUTPUT"
           elif [ "${{ steps.semantic_preview.outputs.new_release_published }}" = "true" ]; then
             echo "build_requested=true" >> "$GITHUB_OUTPUT"
             echo "publish_release=true" >> "$GITHUB_OUTPUT"
@@ -115,7 +133,7 @@ jobs:
           labels: ${{ steps.docker_meta.outputs.labels }}
 
       - name: Release
-        if: steps.release_mode.outputs.publish_release == 'true'
+        if: steps.release_mode.outputs.publish_release == 'true' && !inputs.force_publish_existing
         uses: cycjimmy/semantic-release-action@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
