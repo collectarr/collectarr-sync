@@ -715,6 +715,34 @@ async def test_pairing_code_rejects_non_owner_jwt_user(client):
 
 
 @pytest.mark.asyncio
+async def test_push_is_idempotent_with_client_change_id(client, sync_headers):
+    request = {
+        "device_id": "device-1",
+        "changes": [
+            {
+                "entity_type": "owned_item",
+                "entity_id": "owned-1",
+                "action": "upsert",
+                "client_change_id": "op-123",
+                "client_changed_at": "2026-01-15T10:00:00Z",
+                "payload": {"item_id": "comic-1", "condition": "Near Mint"},
+            }
+        ],
+    }
+
+    first = await client.post("/sync/push", json=request, headers=sync_headers)
+    second = await client.post("/sync/push", json=request, headers=sync_headers)
+    assert first.status_code == 200
+    assert second.status_code == 200
+    # Same change id returned on replay, no duplicate accepted.
+    assert first.json()["accepted"][0]["id"] == second.json()["accepted"][0]["id"]
+
+    status = (await client.get("/sync/status", headers=sync_headers)).json()
+    assert status["change_count"] == 1
+    assert status["entity_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_health_reports_protocol_and_schema_version(client):
     response = await client.get("/health")
     assert response.status_code == 200

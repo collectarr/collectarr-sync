@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -20,6 +21,8 @@ from collectarr_sync.schemas import (
     SyncedEntity,
     as_utc,
 )
+
+logger = logging.getLogger("collectarr_sync.service")
 
 
 def utc_now() -> datetime:
@@ -54,6 +57,19 @@ class SyncService:
         connection = await connect()
         try:
             for change in request.changes:
+                # Idempotency: a retried push carrying the same client_change_id
+                # must not append a duplicate change log entry.
+                if change.client_change_id is not None:
+                    existing = await self._find_change_by_client_id(
+                        connection,
+                        user_id=user_id,
+                        device_id=request.device_id,
+                        client_change_id=change.client_change_id,
+                    )
+                    if existing is not None:
+                        accepted.append(self._change_from_row(existing))
+                        continue
+
                 current = await self._get_entity(
                     connection, change.entity_type, change.entity_id, user_id=user_id
                 )
@@ -91,6 +107,13 @@ class SyncService:
         finally:
             await connection.close()
 
+        logger.info(
+            "sync push: user=%s device=%s accepted=%d rejected=%d",
+            user_id or "<api-key>",
+            request.device_id,
+            len(accepted),
+            len(rejected),
+        )
         return SyncPushResponse(server_time=server_time, accepted=accepted, rejected=rejected)
 
     async def pull(
@@ -234,9 +257,9 @@ class SyncService:
             """
             insert into changes (
               id, entity_type, entity_id, action, payload_json, device_id,
-              client_changed_at, changed_at, user_id
+              client_change_id, client_changed_at, changed_at, user_id
             )
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 change_id,
@@ -245,6 +268,7 @@ class SyncService:
                 change.action,
                 payload_json,
                 device_id,
+                change.client_change_id,
                 iso(change.client_changed_at),
                 iso(changed_at),
                 user_id,
@@ -264,13 +288,15 @@ class SyncService:
     async def _prune_changes(self, connection: aiosqlite.Connection, server_time: datetime) -> None:
         retention_days = get_settings().sync_change_retention_days
         cutoff = server_time - timedelta(days=retention_days)
-        await connection.execute(
+        cursor = await connection.execute(
             """
             delete from changes
             where changed_at < ?
             """,
             (iso(cutoff),),
         )
+        if cursor.rowcount:
+            logger.info("sync prune: removed %d change rows older than %s", cursor.rowcount, iso(cutoff))
 
     async def _prune_changes_if_due(
         self, connection: aiosqlite.Connection, server_time: datetime
@@ -298,6 +324,25 @@ class SyncService:
             where user_id = ? and entity_type = ? and entity_id = ?
             """,
             (user_id, entity_type, entity_id),
+        )
+        return await cursor.fetchone()
+
+    async def _find_change_by_client_id(
+        self,
+        connection: aiosqlite.Connection,
+        *,
+        user_id: str,
+        device_id: str,
+        client_change_id: str,
+    ) -> aiosqlite.Row | None:
+        cursor = await connection.execute(
+            """
+            select * from changes
+            where user_id = ? and device_id = ? and client_change_id = ?
+            order by seq desc
+            limit 1
+            """,
+            (user_id, device_id, client_change_id),
         )
         return await cursor.fetchone()
 

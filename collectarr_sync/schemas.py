@@ -244,6 +244,7 @@ class SyncChangeIn(BaseModel):
     entity_type: str = Field(min_length=1, max_length=80)
     entity_id: str = Field(min_length=1, max_length=120)
     action: SyncAction
+    client_change_id: str | None = Field(default=None, min_length=1, max_length=120)
     client_changed_at: datetime
     payload: dict[str, Any] = Field(default_factory=dict)
 
