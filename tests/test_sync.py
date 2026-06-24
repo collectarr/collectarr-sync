@@ -691,6 +691,30 @@ async def test_pairing_code_includes_protocol_version(client, sync_headers):
 
 
 @pytest.mark.asyncio
+async def test_pairing_code_uses_configured_base_url(client, sync_headers, monkeypatch):
+    import json
+
+    from collectarr_sync.config import get_settings
+
+    monkeypatch.setenv("SYNC_PUBLIC_BASE_URL", "https://sync.example.com")
+    get_settings.cache_clear()
+
+    response = await client.get("/sync/pairing-code", headers=sync_headers)
+    code = json.loads(response.json()["pairing_code"])
+    assert code["sync_base_url"] == "https://sync.example.com"
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_pairing_code_rejects_non_owner_jwt_user(client):
+    from tests.conftest import bearer_headers
+
+    response = await client.get("/sync/pairing-code", headers=bearer_headers("alice"))
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_health_reports_protocol_and_schema_version(client):
     response = await client.get("/health")
     assert response.status_code == 200

@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     sync_database_path: str = "./collectarr-sync.db"
     sync_api_key: str = Field(default="collectarr-sync-dev-key")
     sync_jwt_secret: str = Field(default="")
+    sync_public_base_url: str = Field(default="http://localhost:8020")
     sync_change_retention_days: int = Field(default=90, ge=1)
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

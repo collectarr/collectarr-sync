@@ -153,14 +153,20 @@ async def remove_device(device_id: str, user: AuthenticatedUser) -> dict[str, st
 
 
 @app.get("/sync/pairing-code", tags=["sync"])
-async def pairing_code(_: AuthenticatedUser) -> dict[str, str | int]:
+async def pairing_code(_: SyncAuth) -> dict[str, str | int]:
+    """Return connection settings for pairing a new device.
+
+    Gated to API-key (owner) auth only: the pairing payload carries the master
+    sync key, so it must never be handed to JWT-authenticated sub-users. The
+    advertised base URL comes from configuration, not a hardcoded localhost.
+    """
     import json as _json
 
     settings = get_settings()
     code = _json.dumps(
         {
             "protocol_version": SYNC_PROTOCOL_VERSION,
-            "sync_base_url": "http://localhost:8020",
+            "sync_base_url": settings.sync_public_base_url,
             "sync_key": settings.sync_api_key,
         },
         separators=(",", ":"),
