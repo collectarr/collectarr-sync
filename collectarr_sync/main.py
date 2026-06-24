@@ -132,18 +132,18 @@ async def health() -> dict[str, str | int]:
 
 
 @app.get("/sync/status", response_model=SyncStatusResponse, tags=["sync"])
-async def sync_status(_: AuthenticatedUser) -> SyncStatusResponse:
-    return await SyncService().status(CURRENT_SCHEMA_VERSION)
+async def sync_status(user: AuthenticatedUser) -> SyncStatusResponse:
+    return await SyncService().status(CURRENT_SCHEMA_VERSION, user_id=user.user_id)
 
 
 @app.get("/sync/devices", response_model=list[SyncDeviceResponse], tags=["sync"])
-async def sync_devices(_: AuthenticatedUser) -> list[SyncDeviceResponse]:
-    return await SyncService().devices()
+async def sync_devices(user: AuthenticatedUser) -> list[SyncDeviceResponse]:
+    return await SyncService().devices(user_id=user.user_id)
 
 
 @app.delete("/sync/devices/{device_id}", tags=["sync"])
-async def remove_device(device_id: str, _: AuthenticatedUser) -> dict[str, str | int]:
-    removed = await SyncService().remove_device(device_id)
+async def remove_device(device_id: str, user: AuthenticatedUser) -> dict[str, str | int]:
+    removed = await SyncService().remove_device(device_id, user_id=user.user_id)
     if removed == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -180,7 +180,7 @@ async def pull(payload: SyncPullRequest, user: AuthenticatedUser) -> SyncPullRes
 
 @app.get("/sync/changes", response_model=SyncChangesResponse, tags=["sync"])
 async def changes(
-    since: datetime | None = None, user: AuthenticatedUser = None
+    user: AuthenticatedUser, since: datetime | None = None
 ) -> SyncChangesResponse:
     normalized_since = as_utc(since) if since else None
     return await SyncService().changes(normalized_since, user_id=user.user_id)

@@ -19,6 +19,7 @@ from collectarr_sync.service import SyncService
 async def sync_database(tmp_path, monkeypatch) -> AsyncIterator[None]:
     monkeypatch.setenv("ENVIRONMENT", "test")
     monkeypatch.setenv("SYNC_API_KEY", "test-sync-key")
+    monkeypatch.setenv("SYNC_JWT_SECRET", "test-jwt-secret-at-least-32-bytes-long!!")
     monkeypatch.setenv("SYNC_DATABASE_PATH", str(tmp_path / "sync.db"))
     get_settings.cache_clear()
     SyncService.reset_prune_state_for_testing()
@@ -39,3 +40,11 @@ async def client() -> AsyncIterator[AsyncClient]:
 @pytest.fixture
 def sync_headers() -> dict[str, str]:
     return {"X-Collectarr-Sync-Key": "test-sync-key"}
+
+
+def bearer_headers(user_id: str) -> dict[str, str]:
+    """Build an Authorization header for a JWT-authenticated sync user."""
+    import jwt
+
+    token = jwt.encode({"sub": user_id}, "test-jwt-secret-at-least-32-bytes-long!!", algorithm="HS256")
+    return {"Authorization": f"Bearer {token}"}

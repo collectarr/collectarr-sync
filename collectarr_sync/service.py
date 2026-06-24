@@ -54,7 +54,9 @@ class SyncService:
         connection = await connect()
         try:
             for change in request.changes:
-                current = await self._get_entity(connection, change.entity_type, change.entity_id)
+                current = await self._get_entity(
+                    connection, change.entity_type, change.entity_id, user_id=user_id
+                )
                 current_client_changed_at = (
                     parse_dt(current["client_changed_at"]) if current else None
                 )
@@ -122,15 +124,15 @@ class SyncService:
             await connection.close()
         return SyncChangesResponse(server_time=server_time, changes=changes)
 
-    async def status(self, schema_version: int) -> SyncStatusResponse:
+    async def status(self, schema_version: int, *, user_id: str = "") -> SyncStatusResponse:
         server_time = utc_now()
         settings = get_settings()
         connection = await connect()
         try:
-            entity_count = await self._count(connection, "entities")
-            tombstone_count = await self._count_tombstones(connection)
-            change_count = await self._count(connection, "changes")
-            last_changed_at = await self._last_changed_at(connection)
+            entity_count = await self._count(connection, "entities", user_id=user_id)
+            tombstone_count = await self._count_tombstones(connection, user_id=user_id)
+            change_count = await self._count(connection, "changes", user_id=user_id)
+            last_changed_at = await self._last_changed_at(connection, user_id=user_id)
         finally:
             await connection.close()
         return SyncStatusResponse(
@@ -144,7 +146,7 @@ class SyncService:
             last_changed_at=last_changed_at,
         )
 
-    async def devices(self) -> list[SyncDeviceResponse]:
+    async def devices(self, *, user_id: str = "") -> list[SyncDeviceResponse]:
         connection = await connect()
         try:
             cursor = await connection.execute(
@@ -155,9 +157,11 @@ class SyncService:
                   min(changed_at) as first_seen_at,
                   max(changed_at) as last_seen_at
                 from changes
+                where user_id = ?
                 group by device_id
                 order by max(changed_at) desc, device_id
-                """
+                """,
+                (user_id,),
             )
             rows = await cursor.fetchall()
         finally:
@@ -173,12 +177,12 @@ class SyncService:
             if row["first_seen_at"] and row["last_seen_at"]
         ]
 
-    async def remove_device(self, device_id: str) -> int:
+    async def remove_device(self, device_id: str, *, user_id: str = "") -> int:
         connection = await connect()
         try:
             cursor = await connection.execute(
-                "delete from changes where device_id = ?",
-                (device_id,),
+                "delete from changes where user_id = ? and device_id = ?",
+                (user_id, device_id),
             )
             removed = cursor.rowcount
             await connection.commit()
@@ -205,7 +209,7 @@ class SyncService:
               client_changed_at, changed_at, deleted_at, user_id
             )
             values (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            on conflict(entity_type, entity_id) do update set
+            on conflict(user_id, entity_type, entity_id) do update set
               action = excluded.action,
               payload_json = excluded.payload_json,
               source_device_id = excluded.source_device_id,
@@ -281,40 +285,53 @@ class SyncService:
         return True
 
     async def _get_entity(
-        self, connection: aiosqlite.Connection, entity_type: str, entity_id: str
+        self,
+        connection: aiosqlite.Connection,
+        entity_type: str,
+        entity_id: str,
+        *,
+        user_id: str = "",
     ) -> aiosqlite.Row | None:
         cursor = await connection.execute(
             """
             select * from entities
-            where entity_type = ? and entity_id = ?
+            where user_id = ? and entity_type = ? and entity_id = ?
             """,
-            (entity_type, entity_id),
+            (user_id, entity_type, entity_id),
         )
         return await cursor.fetchone()
 
-    async def _count(self, connection: aiosqlite.Connection, table: str) -> int:
+    async def _count(self, connection: aiosqlite.Connection, table: str, *, user_id: str = "") -> int:
         if table not in {"entities", "changes"}:
             raise ValueError("Unsupported sync table")
-        cursor = await connection.execute(f"select count(*) as count from {table}")
-        row = await cursor.fetchone()
-        return int(row["count"])
-
-    async def _count_tombstones(self, connection: aiosqlite.Connection) -> int:
         cursor = await connection.execute(
-            """
-            select count(*) as count from entities
-            where deleted_at is not null
-            """
+            f"select count(*) as count from {table} where user_id = ?",
+            (user_id,),
         )
         row = await cursor.fetchone()
         return int(row["count"])
 
-    async def _last_changed_at(self, connection: aiosqlite.Connection) -> datetime | None:
+    async def _count_tombstones(self, connection: aiosqlite.Connection, *, user_id: str = "") -> int:
+        cursor = await connection.execute(
+            """
+            select count(*) as count from entities
+            where user_id = ? and deleted_at is not null
+            """,
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+        return int(row["count"])
+
+    async def _last_changed_at(
+        self, connection: aiosqlite.Connection, *, user_id: str = ""
+    ) -> datetime | None:
         cursor = await connection.execute(
             """
             select max(changed_at) as changed_at
             from entities
-            """
+            where user_id = ?
+            """,
+            (user_id,),
         )
         row = await cursor.fetchone()
         return parse_dt(row["changed_at"]) if row["changed_at"] else None
@@ -358,7 +375,7 @@ class SyncService:
                 """
                 select * from changes
                 where changed_at > ? and user_id = ?
-                order by changed_at, id
+                order by seq
                 """,
                 (iso(since), user_id),
             )
@@ -367,7 +384,7 @@ class SyncService:
                 """
                 select * from changes
                 where user_id = ?
-                order by changed_at, id
+                order by seq
                 """,
                 (user_id,),
             )

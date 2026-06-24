@@ -13,7 +13,7 @@ The current protocol version is **1**. Clients should check the
 
 ```
 GET /health
-→ { "status": "ok", "protocol_version": 1, "schema_version": 3 }
+→ { "status": "ok", "protocol_version": 1, "schema_version": 1 }
 ```
 
 ## Authentication
@@ -32,7 +32,7 @@ Response:
 {
   "status": "ok",
   "protocol_version": 1,
-  "schema_version": 3
+  "schema_version": 1
 }
 ```
 
@@ -45,7 +45,7 @@ Response (`SyncStatusResponse`):
 {
   "server_time": "2026-01-15T10:00:00Z",
   "protocol_version": 1,
-  "schema_version": 3,
+  "schema_version": 1,
   "entity_count": 42,
   "tombstone_count": 3,
   "change_count": 150,
