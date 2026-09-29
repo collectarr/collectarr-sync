@@ -1,206 +1,60 @@
-# Sync Protocol Contract v1
+﻿# Sync Protocol Contract v1
 
-## Overview
+## Purpose and boundaries
 
-The Collectarr Sync protocol enables multi-device personal library
-synchronization. It is designed for user-hosted deployments where a single
-sync service serves one user's devices.
+Collectarr Sync stores App-owned personal state only. Core remains the source-neutral catalog API. Sync never stores or distributes canonical catalog records, catalog snapshots, provider identifiers, provider envelopes, ingest jobs, or provider provenance.
 
-## Protocol Version
+Each change is scoped by the authenticated Sync user, `entity_type`, and `entity_id`. A catalog reference is an explicit object containing `kind`, `entity_type`, and `id`, with optional `root_id` and `parent_id` for a retained kind-owned child. An owned reference is `{ "kind": "...", "id": "..." }`. Payloads do not use `item_id`, `anchor_type`, `edition_id`, `variant_id`, or `bundle_release_id` as substitute identity fields.
 
-The current protocol version is **1**. Clients should check the
-`protocol_version` field in `/health` or `/sync/status` before syncing.
+## Version
 
-```
+The current wire protocol is version 1. The current SQLite store schema is also version 1.
+
+```http
 GET /health
-→ { "status": "ok", "protocol_version": 1, "schema_version": 1 }
 ```
 
-## Authentication
+```json
+{ "status": "ok", "protocol_version": 1, "schema_version": 1 }
+```
 
-All `/sync/*` endpoints require the `X-Collectarr-Sync-Key` header matching
-the server's `SYNC_API_KEY`. Invalid keys return `401 Unauthorized`.
+A fresh v1 deployment is required for this protocol. Older personal payload formats are unsupported after the coordinated cutover.
+
+## Authentication and isolation
+
+Sync authenticates each request and partitions stored entities and changes by the authenticated user. A user's devices can only read, overwrite, or delete rows in that user's partition. Deployments must configure per-user authentication; a shared development key is suitable only for a single-user local instance.
 
 ## Endpoints
 
-### `GET /health`
+- `POST /sync/push` accepts personal changes.
+- `POST /sync/pull` returns the current entities, optionally since a timestamp.
+- `GET /sync/changes?since=...` returns the ordered change log.
+- `GET /sync/status` returns counts for the authenticated user.
 
-System health check. No authentication required.
+Each pushed change has `entity_type`, `entity_id`, `action` (`upsert` or `delete`), `client_changed_at`, and a typed personal `payload`. Deletes use a tombstone and may send an empty payload.
 
-Response:
-```json
-{
-  "status": "ok",
-  "protocol_version": 1,
-  "schema_version": 1
-}
-```
+## Supported personal entities
 
-### `GET /sync/status`
+`owned_item` represents an App-owned copy and remains a first-class Sync entity. It carries the copy's personal fields and a reference to its Core Catalog Item. Removing the former `library_item_snapshot` entity removes duplicated canonical catalog data from Sync; it does not remove owned-copy, wishlist, tracking, session, or other personal-state synchronization.
 
-Returns sync service statistics.
+| Entity type | Payload identity and contents |
+|---|---|
+| `owned_item` | `catalog_ref`, optional `target_ref`, and the user's copy fields such as condition, purchase details, location, notes, and kind-owned copy details. |
+| `wishlist_item` | `catalog_ref`, target price, currency, notes, and creation time. |
+| `tracking_entry` | `catalog_ref`, optional `owned_ref`, status, rating, dates, progress, notes, and kind-owned progress fields. |
+| `tracking_unit` | `catalog_ref`, optional `owned_ref` and `tracking_entry_id`, completion time, plus kind-owned unit coordinates. |
+| `watch_session` | `catalog_ref`, watch time, source, rating, notes, and kind-owned episode coordinates. |
+| `custom_episode` | `catalog_ref` and the user's custom episode fields. |
+| `metadata_override` | `target_ref`, `field_key`, and the user's override value. |
+| `location` | User-owned location name, parent, description, and order. |
+| `pick_list_value` | User vocabulary list, optional kind, value, and order. |
 
-Response (`SyncStatusResponse`):
-```json
-{
-  "server_time": "2026-01-15T10:00:00Z",
-  "protocol_version": 1,
-  "schema_version": 1,
-  "entity_count": 42,
-  "tombstone_count": 3,
-  "change_count": 150,
-  "retention_days": 90,
-  "last_changed_at": "2026-01-15T09:55:00Z"
-}
-```
+The accepted entity set is explicit. Unknown entity types and removed snapshot or anchor payloads are rejected. Loans, folders, reading queues, custom-field values, and personal images must be added to this contract together with their App queue producers before they can be advertised as cross-device Sync features.
 
-### `GET /sync/devices`
+## Conflict handling and deletes
 
-Returns known devices with change counts and timestamps.
+The service uses last-write-wins by `client_changed_at` within a user's entity key. A stale write is rejected with the winning service payload so the client can review or retry it. A delete is stored as a tombstone until a newer upsert replaces it. The append-only change log is retained for `SYNC_CHANGE_RETENTION_DAYS` (default 90); pruning old changes does not remove current entity state or tombstones.
 
-Response: `list[SyncDeviceResponse]`
-```json
-[
-  {
-    "device_id": "desktop-abc123",
-    "change_count": 85,
-    "first_seen_at": "2026-01-01T00:00:00Z",
-    "last_seen_at": "2026-01-15T09:55:00Z"
-  }
-]
-```
+## Reset and backup
 
-### `POST /sync/push`
-
-Push local changes to the service. Changes are processed in order.
-
-Request (`SyncPushRequest`):
-```json
-{
-  "device_id": "desktop-abc123",
-  "changes": [
-    {
-      "entity_type": "owned_item",
-      "entity_id": "owned-1",
-      "action": "upsert",
-      "client_changed_at": "2026-01-15T10:00:00Z",
-      "payload": {
-        "item_id": "comic-1",
-        "condition": "Near Mint",
-        "grade": "9.8"
-      }
-    }
-  ]
-}
-```
-
-Response (`SyncPushResponse`):
-```json
-{
-  "server_time": "2026-01-15T10:00:01Z",
-  "accepted": [
-    {
-      "id": "change-uuid",
-      "entity_type": "owned_item",
-      "entity_id": "owned-1",
-      "action": "upsert",
-      "device_id": "desktop-abc123",
-      "client_changed_at": "2026-01-15T10:00:00Z",
-      "changed_at": "2026-01-15T10:00:01Z",
-      "payload": { "..." : "..." }
-    }
-  ],
-  "rejected": [
-    {
-      "entity_type": "owned_item",
-      "entity_id": "owned-2",
-      "reason": "server_has_newer_client_change",
-      "current_client_changed_at": "2026-01-15T10:01:00Z",
-      "current_action": "upsert",
-      "current_payload": { "..." : "..." }
-    }
-  ]
-}
-```
-
-### `POST /sync/pull`
-
-Pull entities and changes from the service.
-
-Request (`SyncPullRequest`):
-```json
-{
-  "since": "2026-01-15T00:00:00Z"
-}
-```
-
-- `since = null`: full snapshot (all entities, no changes)
-- `since` set: entities changed after that time + change log entries
-
-Response (`SyncPullResponse`):
-```json
-{
-  "server_time": "2026-01-15T10:00:01Z",
-  "entities": [
-    {
-      "entity_type": "owned_item",
-      "entity_id": "owned-1",
-      "action": "upsert",
-      "source_device_id": "desktop-abc123",
-      "client_changed_at": "2026-01-15T10:00:00Z",
-      "changed_at": "2026-01-15T10:00:01Z",
-      "deleted_at": null,
-      "payload": { "..." : "..." }
-    }
-  ],
-  "changes": []
-}
-```
-
-### `GET /sync/changes?since=...`
-
-Lightweight change log without full entity snapshots.
-
-## Entity Types
-
-| Type | Description |
-|------|-------------|
-| `owned_item` | User's owned collection entry |
-| `tracking_entry` | User tracking state for owned or tracked-only items |
-| `wishlist_item` | Wishlist entry |
-| `library_item_snapshot` | Catalog metadata snapshot |
-| `note` | Personal notes on items |
-
-## Conflict Resolution
-
-Policy: **last-write-wins by `client_changed_at`**.
-
-When a push contains a change with `client_changed_at` older than the
-server's existing `client_changed_at` for the same entity, the change is
-rejected. The rejection includes the server's current state so the client
-can show a diff.
-
-Client actions on rejection:
-- **Keep service**: Accept the server version (default)
-- **Retry local**: Queue a new push with an updated `client_changed_at`
-- **Dismiss**: Discard the conflict notification
-
-## Tombstones
-
-Deletes are stored with `action = "delete"` and a non-null `deleted_at`.
-Tombstones persist until the entity is overwritten by a new upsert.
-
-## Change Retention
-
-The change log is pruned after `SYNC_CHANGE_RETENTION_DAYS` (default 90).
-Clients that haven't synced within the retention window should do a full
-pull (`since = null`) to get the complete entity snapshot.
-
-## Backwards Compatibility
-
-- New optional fields may be added to payloads without incrementing the
-  protocol version.
-- Breaking changes (removed fields, changed semantics) increment
-  `protocol_version`.
-- Clients should check `protocol_version` on `/health` and warn users if
-  the server version is newer than supported.
+The v1 store has no compatibility path for the former snapshot and anchor payloads. Before upgrading a development instance, stop Sync, copy the SQLite database and any `-wal`/`-shm` files to a dated backup outside the data directory, then configure the v1 instance to use a new empty database path. Do not point a live deployment at the new schema or remove an existing database as part of this implementation. Restoring an old database is a manual recovery operation and does not make its payloads valid under v1.

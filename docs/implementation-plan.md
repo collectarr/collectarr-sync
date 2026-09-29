@@ -1,63 +1,26 @@
-# Collectarr Sync Implementation Plan
+# Collectarr Sync v1 Scope
 
-Sync owns optional, user-hosted personal library sync. It stores personal
-snapshots and conflict state for a user's devices. It does not own provider
-metadata, canonical catalog records, or image/provider ingest.
+## Ownership boundary
 
-## Done
+Collectarr Sync mirrors App-owned personal records between a user's devices. Collectarr Core owns canonical Catalog Items and their real kind-owned children. Sync does not store catalog snapshots, provider IDs, provider envelopes, import jobs, or provider provenance.
 
-- Split from the original monorepo into `collectarr/collectarr-sync`.
-- CI runs Python lint/tests.
-- FastAPI sync service exposes push/pull/status/devices/change APIs.
-- SQLite-backed storage, migrations, tombstones, conflicts, and stale-write
-  rejection exist.
-- Basic API-key authentication exists.
-- Documentation explains the metadata-only Core boundary and local-first App
-  model.
-- Generic entity-type sync payloads already support personal metadata alongside
-  owned/wishlist state, including synced location definitions.
+The personal record key is scoped by authenticated user, `entity_type`, and `entity_id`. Payload references identify either a catalog target or an owned copy. Deletes remain tombstones; conflict handling remains last-write-wins by client timestamp.
 
-## MVP Priorities
+## Supported v1 entities
 
-1. ~~Protocol contract~~ ✅
-   - ~~Add an explicit sync protocol version to status/pairing responses.~~
-   - ~~Publish payload schemas for library snapshots, tombstones, conflicts, and
-     pairing codes.~~
-   - ~~Keep backwards-compatibility notes for App releases.~~
+The supported entity types are defined by `collectarr_sync.schemas.SyncEntityType` and documented in [the protocol contract](protocol-contract.md): owned items, wishlist items, tracking entries and units, watch sessions, custom episodes, metadata overrides, locations, and pick-list values.
 
-2. ~~Pairing and device management~~ ✅
-   - ~~Keep manual pairing code as the reliable MVP path.~~
-   - ~~Support QR render/scan from App when platform support is ready.~~
-   - ~~Surface known devices, last-seen timestamps, and revoke/remove actions.~~
+`library_item_snapshot` was removed because it copied canonical catalog data into Sync. This does not remove sync for owned copies, wishlist, tracking, sessions, or other supported personal records.
 
-3. ~~Conflict handling~~ ✅
-   - ~~Make server conflict payloads easy for App to diff: local rejected payload,
-     service payload, timestamps, device IDs, and action reason.~~
-   - ~~Support App actions: keep service, retry local, dismiss, and inspect raw
-     payload.~~
-   - ~~Add tests for multi-device stale writes and retry-after-conflict flows.~~
+Loans, folders, reading queues, custom-field values, and personal images are not currently cross-device Sync entities. Add each only with an App queue producer, typed v1 payload, apply/retry handling, conflict behavior, and protocol documentation.
 
-4. ~~Backup and restore~~ ✅
-   - ~~Document Docker volume and direct SQLite backup/restore.~~
-   - ~~Add a service health check that reports entity/change/tombstone counts.~~
-   - ~~Add restore warnings for stale clients and expected conflict behavior.~~
+## Coordinated reset
 
-5. ~~Deployment hardening~~ ✅
-   - ~~Require non-default `SYNC_API_KEY` outside development/test.~~
-   - ~~Document HTTPS/LAN/reverse-proxy and CORS requirements.~~
-   - ~~Add Docker image publishing once release flow is set.~~
+The v1 wire contract and SQLite store do not accept the old catalog-snapshot or Work/Release anchor payloads. Do not migrate or reset a deployed database as part of implementation. For a fresh development instance, stop Sync, preserve any existing database and SQLite sidecars as a separate backup, then configure a new empty database path for v1. See [the deployment and reset guide](sync.md).
 
-## Post-MVP
+## Completion checks
 
-- Optional per-user accounts if one Sync instance serves multiple people.
-  - If this lands, keep the single-user/self-host path simple; multi-user support should layer on top rather than complicate pairing for the common case.
-  - Scope accounts around isolated datasets, device ownership, and admin-only maintenance actions before expanding into richer auth UX.
-- Encrypted payload mode or pluggable secret handling.
-  - Prefer an additive mode where operators can choose envelope encryption or external secret providers without breaking the plain self-hosted path.
-  - Preserve conflict inspection/debuggability expectations; encrypted mode must still make restore and stale-write handling operable.
-- Retention policies for old changes/tombstones.
-  - Define retention separately for audit visibility, pull safety windows, and storage cleanup so old devices do not silently lose reconciliation context.
-  - Expose retention policy warnings in status/admin surfaces before destructive cleanup is enabled.
-- Export/import endpoint for full sync database snapshots.
-  - Treat this as a real migration/backup surface: include version metadata, integrity checks, and explicit restore warnings for stale clients.
-  - Keep snapshot export/import separate from the normal sync protocol so bulk recovery does not distort per-change conflict semantics.
+- App queue producers and Sync schemas agree on every supported entity and reference.
+- User isolation, scoped entity identity, last-write-wins conflicts, and tombstones remain intact.
+- No Sync path reads or writes canonical Core catalog data.
+- README, this scope, and the protocol contract describe the same supported entity set.

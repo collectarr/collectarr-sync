@@ -7,11 +7,11 @@ This work starts from the following clean Sync revision:
 | Sync | `codex/pre-cutover-rollback-20260929` | `625d82cbb7c1c11fc2f112bde4f3510811096b59` |
 | App | `codex/pre-cutover-rollback-20260929` | `6949fb4f00e6fdd5828e21474b74fa448e793fe9` |
 
-## Current protocol surfaces to replace
+## Pre-cutover protocol recorded for migration context
 
-The existing protocol accepts personal entity payloads including `owned_item`, `tracking_entry`, `wishlist_item`, `note`, `watch_session`, `metadata_override`, `custom_episode`, and `pick_list_value`. It also accepts `library_item_snapshot`, which duplicates catalog metadata into Sync. Owned and wishlist payloads can encode legacy `anchor_type`, edition, variant, and bundle-release coordinates.
+At the recorded baseline, the protocol accepted `owned_item`, `tracking_entry`, `wishlist_item`, `note`, `watch_session`, `metadata_override`, `custom_episode`, and `pick_list_value`. It also accepted `library_item_snapshot`, which duplicated catalog metadata into Sync. Owned and wishlist payloads could encode legacy `anchor_type`, edition, variant, and bundle-release coordinates. These details describe the migration source only; the supported v1 set and payloads are defined in `protocol-contract.md`.
 
-The flattened target protocol must sync App-owned personal state only. Canonical catalog items and their genuine catalog children remain in Core. Personal entity identity must use explicit catalog-item or owned-item references; old Work/Release/Copy anchors and catalog snapshots are removed from the final protocol. Existing user isolation, entity-scoped identity, last-write-wins conflict handling, and tombstones must remain intact.
+The flattened protocol syncs App-owned personal state only. Canonical Catalog Items and their genuine catalog children remain in Core. Personal entity identity uses explicit catalog-item or owned-item references; old Work/Release/Copy anchors and catalog snapshots are rejected by the v1 contract. Existing user isolation, entity-scoped identity, last-write-wins conflict handling, and tombstones remain required.
 
 ## Cutover safety
 
