@@ -22,7 +22,7 @@ state remains local-first in `collectarr-app`.
 ### 🔄 Personal Sync Protocol
 
 - Authenticated push, pull, changes, status, and device APIs
-- Sync protocol and schema version tracking so clients can reason about compatibility
+- Sync protocol and schema versions so clients can identify the active contract
 - Explicitly typed personal collection entities, tombstones, and bounded change logs stored in SQLite
 - Explicit service health and retention reporting instead of opaque background state
 
@@ -127,7 +127,7 @@ with both the semantic version tag and `latest`.
 ## 🧭 Library Parity Contract
 
 See [docs/library-parity-contract.md](docs/library-parity-contract.md) for Sync
-compatibility guarantees against the shared Core contract.
+field alignment with the shared Core contract.
 
 ## 🗺️ Current Focus
 

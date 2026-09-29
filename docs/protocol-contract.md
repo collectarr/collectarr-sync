@@ -57,4 +57,4 @@ The service uses last-write-wins by `client_changed_at` within a user's entity k
 
 ## Reset and backup
 
-The v1 store has no compatibility path for the former snapshot and anchor payloads. Before upgrading a development instance, stop Sync, copy the SQLite database and any `-wal`/`-shm` files to a dated backup outside the data directory, then configure the v1 instance to use a new empty database path. Do not point a live deployment at the new schema or remove an existing database as part of this implementation. Restoring an old database is a manual recovery operation and does not make its payloads valid under v1.
+Sync creates only the v1 schema on a new, empty database path. To adopt v1 in development, stop Sync, retain the existing database and any `-wal`/`-shm` sidecars outside the data directory, then configure the v1 instance with a different empty database path. Do not point a live deployment at the new schema or remove an existing database as part of this implementation.

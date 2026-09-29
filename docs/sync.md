@@ -2,7 +2,7 @@
 
 Collectarr Sync mirrors App-owned personal state between a user's devices. Core owns canonical catalog records and exposes the source-neutral catalog API; Sync does not receive catalog snapshots, provider IDs, provider envelopes, or import/ingest jobs.
 
-The current protocol and SQLite schema are both version 1. The supported personal entity list, reference shape, conflict policy, and removed legacy payloads are defined in [the protocol contract](protocol-contract.md).
+The supported protocol and SQLite schema are both version 1. Sync creates this schema for a new, empty database path and has no database upgrade path. The supported personal entity list, reference shape, and conflict policy are defined in [the protocol contract](protocol-contract.md).
 
 ## Run locally
 
@@ -35,13 +35,13 @@ For an Android emulator use `http://10.0.2.2:8020`; for another device use the h
 
 ## Coordinated v1 setup
 
-The v1 payloads intentionally reject the earlier catalog snapshot and Work/Release anchor formats. Before adopting this version with an existing local Sync database, stop the service and copy the database plus any SQLite sidecars to a dated backup outside its data directory. Configure v1 to use a new, empty database path and pair the App clients with that service. Do not delete or overwrite the prior database, reset a deployed database, or treat an old-format backup as a v1 backup. Keep the old backup separately for manual recovery.
+The v1 service accepts only the final personal entity payloads. Before adopting it with an existing Sync database, stop the service and retain a backup outside its data directory. Configure v1 to use a new, empty database path and pair the App clients with that service. Do not delete or overwrite the prior database or reset a deployed database as part of this code change. Existing database formats are unsupported.
 
-App and Core require their own coordinated v1 setup instructions; this Sync procedure does not reset or migrate either repository's database.
+App and Core require their own coordinated v1 setup instructions; this Sync procedure does not reset either repository's database.
 
 ## Backup
 
-Stop Sync before copying its SQLite database. Include the database file and its `-wal` and `-shm` files if present. Store the copy outside the service data directory and label it with the Sync protocol/schema version. A backup from an older protocol is not directly restorable into v1.
+Stop Sync before copying its SQLite database. Include the database file and its `-wal` and `-shm` files if present. Store the copy outside the service data directory and label it with the Sync protocol/schema version. Only v1 databases are supported by this service.
 
 ## Protocol behavior
 
