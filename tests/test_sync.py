@@ -212,7 +212,7 @@ async def test_push_rejects_unknown_tracking_source_type(client, sync_headers):
 
 
 @pytest.mark.asyncio
-async def test_push_then_pull_returns_library_item_snapshot(client, sync_headers):
+async def test_catalog_item_snapshots_are_not_sync_entities(client, sync_headers):
     response = await client.post(
         "/sync/push",
         headers=sync_headers,
@@ -236,14 +236,11 @@ async def test_push_then_pull_returns_library_item_snapshot(client, sync_headers
         },
     )
 
-    pull = await client.post("/sync/pull", headers=sync_headers, json={})
+    assert response.status_code == 422
 
-    assert response.status_code == 200
+    pull = await client.post("/sync/pull", headers=sync_headers, json={})
     assert pull.status_code == 200
-    entity = pull.json()["entities"][0]
-    assert entity["entity_type"] == "library_item_snapshot"
-    assert entity["entity_id"] == "comic-1"
-    assert entity["payload"]["title"] == "Absolute Batman"
+    assert pull.json()["entities"] == []
 
 
 @pytest.mark.asyncio
