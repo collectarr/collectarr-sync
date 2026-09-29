@@ -68,7 +68,7 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 
 @dataclass(frozen=True, slots=True)
 class SyncUser:
-    """Authenticated sync user. user_id is empty for legacy API-key auth."""
+    """Authenticated Sync user; the shared development key uses the default partition."""
 
     user_id: str = ""
 
@@ -79,14 +79,10 @@ async def resolve_sync_user(
         HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)
     ] = None,
 ) -> SyncUser:
-    """Authenticate via API key header *or* JWT Bearer token.
-
-    - API key: legacy mode, returns ``SyncUser(user_id="")``.
-    - JWT: decodes token, extracts ``sub`` claim as user_id.
-    """
+    """Authenticate with the shared development key or a JWT Bearer token."""
     settings = get_settings()
 
-    # Try API key first (backwards-compatible)
+    # The development key represents the default single-user partition.
     if x_collectarr_sync_key and x_collectarr_sync_key == settings.sync_api_key:
         return SyncUser()
 
