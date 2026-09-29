@@ -1,239 +1,54 @@
-# Sync Boundary
+﻿# Collectarr Sync
 
-Collectarr keeps the central backend metadata-only. The hosted or shared server stores canonical catalog data, provider IDs, images, search indexes, auth/admin identity, and operational state. It does not store a user's owned items, wishlist, purchase dates, prices, grades, notes, tags, or personal shelves.
+Collectarr Sync mirrors App-owned personal state between a user's devices. Core owns canonical catalog records and exposes the source-neutral catalog API; Sync does not receive catalog snapshots, provider IDs, provider envelopes, or import/ingest jobs.
 
-## Local-First Client
+The current protocol and SQLite schema are both version 1. The supported personal entity list, reference shape, conflict policy, and removed legacy payloads are defined in [the protocol contract](protocol-contract.md).
 
-The Flutter app writes personal data to its local Drift database:
-
-- catalog item snapshots for saved library entries
-- owned items
-- wishlist entries
-- condition and grading
-- purchase date and price
-- personal notes
-- local delete markers
-
-This lets Android, desktop, and web builds work offline without sending private collection state to the central metadata server.
-
-## Personal Sync Service
-
-Multi-device personal sync lives in a separate opt-in service named `collectarr-sync`.
-
-That service is user-hosted and can expose the user's personal database to their own devices:
-
-- desktop app writes local changes
-- Android app writes local changes
-- optional web client connects to the user's own sync service
-- central `collectarr` metadata server remains unaware of personal collection state
-
-## Running Locally
+## Run locally
 
 ```powershell
 $env:SYNC_API_KEY="collectarr-sync-dev-key"
+$env:SYNC_DATABASE_PATH=".\data\collectarr-sync-v1.db"
 uvicorn collectarr_sync.main:app --host 0.0.0.0 --port 8020 --reload
 ```
 
-The service listens on http://localhost:8020 by default and stores data in
-`./collectarr-sync.db`. Requests to `/sync/*` require:
+The development API key supports one local user partition. Configure user authentication for deployments shared by multiple accounts. Requests to `/sync/*` require the configured Sync key or the configured user bearer token.
 
-```http
-X-Collectarr-Sync-Key: collectarr-sync-dev-key
-```
-
-Change `SYNC_API_KEY` before exposing the service outside your local network.
-
-Docker run example:
+Docker example:
 
 ```powershell
 docker build -t collectarr-sync .
 docker run --rm -p 8020:8020 `
   -e SYNC_API_KEY=collectarr-sync-dev-key `
-  -e SYNC_DATABASE_PATH=/data/collectarr-sync.db `
-  -v collectarr_sync_data:/data `
+  -e SYNC_DATABASE_PATH=/data/collectarr-sync-v1.db `
+  -v collectarr_sync_v1_data:/data `
   collectarr-sync
 ```
 
-Flutter clients read the sync endpoint from Dart defines:
+Flutter clients receive the endpoint through Dart defines:
 
 ```powershell
 flutter run --dart-define=COLLECTARR_SYNC_BASE_URL=http://localhost:8020 --dart-define=COLLECTARR_SYNC_KEY=collectarr-sync-dev-key
 ```
 
-Use `http://10.0.2.2:8020` for the Android emulator, or the host machine's LAN IP for physical devices.
+For an Android emulator use `http://10.0.2.2:8020`; for another device use the host's LAN address. Web clients also need browser CORS and local-network access.
 
-The Flutter Settings page also has endpoint presets for common local setups:
+## Coordinated v1 setup
 
-- local desktop: `http://localhost:8010` and `http://localhost:8020`
-- Android emulator: `http://10.0.2.2:8010` and `http://10.0.2.2:8020`
-- LAN template: `http://192.168.1.10:8010` and `http://192.168.1.10:8020`
+The v1 payloads intentionally reject the earlier catalog snapshot and Work/Release anchor formats. Before adopting this version with an existing local Sync database, stop the service and copy the database plus any SQLite sidecars to a dated backup outside its data directory. Configure v1 to use a new, empty database path and pair the App clients with that service. Do not delete or overwrite the prior database, reset a deployed database, or treat an old-format backup as a v1 backup. Keep the old backup separately for manual recovery.
 
-Presets fill the metadata and sync URL fields. Save the settings after applying
-a preset, and edit the LAN host IP before saving it for a physical device.
+App and Core require their own coordinated v1 setup instructions; this Sync procedure does not reset or migrate either repository's database.
 
-Web builds connect to the personal sync service directly from the browser.
-Browser CORS, HTTPS, and local-network rules can block web sync even when the
-same endpoint works from desktop or mobile. The central metadata server still
-does not store private collection data as a fallback.
+## Backup
 
-## Pairing Devices
+Stop Sync before copying its SQLite database. Include the database file and its `-wal` and `-shm` files if present. Store the copy outside the service data directory and label it with the Sync protocol/schema version. A backup from an older protocol is not directly restorable into v1.
 
-The Flutter Settings page can copy a pairing code, show the same code as a QR
-payload, and apply a pasted pairing code on another device. The code contains
-only connection settings:
+## Protocol behavior
 
-- metadata API URL
-- personal sync service URL
-- personal sync key
+- User partitioning isolates each account's entities and change log.
+- Conflicts use last-write-wins by the client timestamp; rejected writes include the service state.
+- Deletes remain as tombstones until a newer upsert replaces them.
+- The ordered change log is retained for 90 days by default; current entity state remains after log pruning.
+- Sync mirrors personal records only. Canonical catalog search, edits, covers, and proposals go through Core/App flows.
 
-It does not include the local `device_id`. Each app installation keeps its own
-stable device identity so sync can distinguish the devices that wrote changes.
-
-For LAN setups, copy the pairing code from the configured desktop device and
-apply it on the phone after editing the host IP if needed. QR scanning can be
-added later, but manual copy/paste and QR rendering are enough for the MVP.
-
-## Backup And Restore
-
-The sync service stores personal library state, so back it up separately from
-the central metadata server.
-
-Docker volume backup:
-
-```powershell
-docker stop collectarr-sync
-docker run --rm -v collectarr_sync_data:/data -v ${PWD}:/backup alpine sh -c "cp -a /data /backup/collectarr-sync-data"
-Compress-Archive -Path .\collectarr-sync-data\* -DestinationPath .\collectarr-sync-data.zip -Force
-docker start collectarr-sync
-```
-
-Docker volume restore:
-
-```powershell
-Expand-Archive .\collectarr-sync-data.zip -DestinationPath .\collectarr-sync-data-restore -Force
-docker stop collectarr-sync
-docker run --rm -v collectarr_sync_data:/data alpine sh -c "rm -rf /data/*"
-docker run --rm -v collectarr_sync_data:/data -v ${PWD}/collectarr-sync-data-restore:/restore alpine sh -c "cp -a /restore/. /data/"
-docker start collectarr-sync
-```
-
-Local SQLite backup:
-
-1. Stop `collectarr-sync`.
-2. Copy the SQLite database file and its `-wal` and `-shm` sidecar files if
-   they exist.
-3. Restart `collectarr-sync`.
-4. After restore, run `GET /status` and check the entity, tombstone, and change
-   counts before syncing another device.
-
-Because clients keep local snapshots too, a restore can surface stale-client
-conflicts. Flutter Settings lists rejected sync changes and lets the user choose
-between keeping the service version or queuing the current local version to
-overwrite the service on the next sync.
-
-## Contract
-
-The current service uses a diff-oriented shape:
-
-- `POST /sync/push`
-- `POST /sync/pull`
-- `GET /sync/changes?since=...`
-
-Suggested sync fields:
-
-- `device_id`: stable client installation identifier
-- `client_changed_at`: timestamp assigned by the client
-- `changed_at`: service timestamp assigned when a change is accepted
-- `entity_type`: `library_item_snapshot`, `owned_item`, `tracking_entry`, `wishlist_item`, `note`, or future local entities
-- `action`: `upsert` or `delete`
-- `payload`: entity-specific local data
-
-Initial conflict policy is last-write-wins, with tombstones for deletes. When a
-push is rejected because the service has a newer client timestamp, Flutter keeps
-the service version by default but can enqueue a fresh local retry from Settings
-when the local device should win.
-
-Rejected push responses include the service action and service payload that won
-the conflict. Flutter attaches the rejected local queued payload before showing
-the conflict review, so Settings can display a side-by-side local vs service
-diff without calling Collectarr Core.
-
-`tracking_entry` payloads are validated strictly by the sync service. The service currently enforces `item_id`, `rating` in the range 0-10, non-negative progress counters, `progress_total > 0` when present, `progress_current <= progress_total`, and `finished_at >= started_at`.
-
-Full pulls return the current entity state only. Incremental pulls with `since` return both current entities changed since that timestamp and the ordered change records for that window.
-
-The append-only `changes` log is retained for `SYNC_CHANGE_RETENTION_DAYS` days, defaulting to 90. Pruned changes do not remove current entity state or delete tombstones.
-
-`library_item_snapshot` stores the catalog metadata needed to render a user's saved item on another device without calling the central Collectarr Core again. The snapshot is intentionally client-owned sync data, not canonical provider metadata. A typical payload includes:
-
-- `snapshot_version`
-- `kind`
-- `title`
-- `item_number`
-- `synopsis`
-- `cover_image_url`
-- `thumbnail_image_url`
-- `publisher`
-- `release_date`
-- `release_year`
-- `barcode`
-- `variant`
-
-### Push Example
-
-```json
-{
-  "device_id": "desktop",
-  "changes": [
-    {
-      "entity_type": "library_item_snapshot",
-      "entity_id": "comic-1",
-      "action": "upsert",
-      "client_changed_at": "2026-05-11T09:59:59Z",
-      "payload": {
-        "snapshot_version": 1,
-        "kind": "comic",
-        "title": "Absolute Batman",
-        "item_number": "1",
-        "cover_image_url": "https://cdn.example/absolute-batman-1.jpg",
-        "thumbnail_image_url": "https://cdn.example/absolute-batman-1-thumb.jpg",
-        "publisher": "DC",
-        "release_year": 2024
-      }
-    },
-    {
-      "entity_type": "owned_item",
-      "entity_id": "owned-1",
-      "action": "upsert",
-      "client_changed_at": "2026-05-11T10:00:00Z",
-      "payload": {
-        "item_id": "comic-1",
-        "condition": "Near Mint",
-        "grade": "9.8"
-      }
-    },
-    {
-      "entity_type": "tracking_entry",
-      "entity_id": "tracking-1",
-      "action": "upsert",
-      "client_changed_at": "2026-05-11T10:05:00Z",
-      "payload": {
-        "item_id": "comic-1",
-        "source_type": "digital",
-        "status": "Completed",
-        "rating": 9,
-        "edition_id": "edition-deluxe",
-        "variant_id": "variant-1"
-      }
-    }
-  ]
-}
-```
-
-### Pull Example
-
-```json
-{
-  "since": "2026-05-11T00:00:00Z"
-}
-```
+See [protocol-contract.md](protocol-contract.md) for exact entity payloads and endpoint shapes.

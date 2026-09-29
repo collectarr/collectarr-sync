@@ -10,10 +10,10 @@
 
 > Optional personal sync service for Collectarr: device-aware push/pull APIs, conflict review, tombstones, and backup-friendly storage.
 
-Collectarr Sync keeps personal shelf state in sync between a user's devices. It
-does not fetch provider metadata and it does not own the canonical catalog.
-Shared metadata stays in `collectarr-core`, while the user's local-first shelf
-state continues to live in `collectarr-app`.
+Collectarr Sync keeps App-owned personal state in sync between a user's
+devices. It does not fetch provider metadata, ingest catalog data, or own the
+canonical catalog. Shared metadata stays in `collectarr-core`, while personal
+state remains local-first in `collectarr-app`.
 
 ---
 
@@ -23,7 +23,7 @@ state continues to live in `collectarr-app`.
 
 - Authenticated push, pull, changes, status, and device APIs
 - Sync protocol and schema version tracking so clients can reason about compatibility
-- Personal collection entities, catalog snapshots, tombstones, and bounded change logs stored in SQLite
+- Explicitly typed personal collection entities, tombstones, and bounded change logs stored in SQLite
 - Explicit service health and retention reporting instead of opaque background state
 
 ### 📱 Device Identity And Conflict Handling
@@ -37,7 +37,7 @@ state continues to live in `collectarr-app`.
 
 - Simple FastAPI deployment for local LAN or self-hosted Docker usage
 - Backup and restore guidance for the SQLite database and mounted Docker volume
-- Minimal service surface built for personal use rather than multi-tenant SaaS behavior
+- User-partitioned storage for personal use and self-hosted deployments
 - Clear repo boundary relative to `collectarr-app` and `collectarr-core`
 
 ---
@@ -87,8 +87,9 @@ docs.
 
 It deliberately does not own:
 
-- canonical metadata ingest
+- canonical catalog records or catalog snapshots
 - provider search
+- provider IDs, envelopes, or ingest workflows
 - catalog editorial workflows
 - local collection UX
 
@@ -121,7 +122,7 @@ with both the semantic version tag and `latest`.
 | Repo | Purpose |
 |------|---------|
 | `collectarr-app` | Flutter client that owns local-first shelf state and conflict review UX |
-| `collectarr-core` | Canonical metadata catalog, provider ingest, and admin server |
+| `collectarr-core` | Source-neutral canonical metadata catalog, proposals, and admin server |
 
 ## 🧭 Library Parity Contract
 
@@ -130,15 +131,15 @@ compatibility guarantees against the shared Core contract.
 
 ## 🗺️ Current Focus
 
-See [docs/implementation-plan.md](docs/implementation-plan.md) for the active
-Sync roadmap.
+See [docs/protocol-contract.md](docs/protocol-contract.md) for the v1 payload
+contract and [docs/sync.md](docs/sync.md) for deployment and reset guidance.
 
 Near-term Sync work:
 
 - make pairing reliable enough for MVP with manual code, QR render, and clear LAN setup docs
 - deepen conflict actions beyond review: keep service, keep local, retry local, and surface stale-client causes clearly
 - harden backup/restore around the SQLite database, WAL files, and service health checks
-- publish stable sync payload schemas for `collectarr-app`
+- expand the typed personal payload set alongside App queue producers for loans, folders, reading queues, custom-field values, and personal images
 - keep the service intentionally personal-data-only; it should never fetch provider metadata or become a catalog mirror
 
 ---

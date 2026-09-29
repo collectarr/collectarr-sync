@@ -1,39 +1,33 @@
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 SyncAction = Literal["upsert", "delete"]
 TrackingSourceType = Literal["physical", "digital", "streaming"]
-PersonalAnchorType = Literal["item", "edition", "variant", "bundle_release"]
+MediaKind = Literal[
+    "anime",
+    "boardgame",
+    "book",
+    "comic",
+    "game",
+    "manga",
+    "movie",
+    "music",
+    "tv",
+]
+SyncEntityType = Literal[
+    "owned_item",
+    "wishlist_item",
+    "tracking_entry",
+    "tracking_unit",
+    "watch_session",
+    "custom_episode",
+    "metadata_override",
+    "location",
+    "pick_list_value",
+]
 SYNC_PROTOCOL_VERSION = 1
-
-
-def _has_anchor_value(value: str | None) -> bool:
-    trimmed = value.strip() if value else ""
-    return bool(trimmed)
-
-
-def normalize_personal_anchor_type(value: str | None) -> PersonalAnchorType | None:
-    normalized = value.strip().lower() if isinstance(value, str) else None
-    if not normalized:
-        return None
-    if normalized in {"item", "media", "work"}:
-        return "item"
-    if normalized in {"edition", "release"}:
-        return "edition"
-    if normalized in {"variant", "physical_release", "physical-release"}:
-        return "variant"
-    if normalized in {
-        "bundle_release",
-        "bundle-release",
-        "bundle",
-        "package",
-        "box_set",
-        "box-set",
-    }:
-        return "bundle_release"
-    raise ValueError(f"Unsupported personal anchor type: {value}")
 
 
 def as_utc(value: datetime) -> datetime:
@@ -42,11 +36,26 @@ def as_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
+class CatalogEntityRefPayload(BaseModel):
+    kind: MediaKind
+    entity_type: str = Field(min_length=1, max_length=80)
+    id: str = Field(min_length=1, max_length=120)
+    root_id: str | None = Field(default=None, min_length=1, max_length=120)
+    parent_id: str | None = Field(default=None, min_length=1, max_length=120)
+
+    model_config = {"extra": "forbid"}
+
+
+class OwnedItemRefPayload(BaseModel):
+    kind: MediaKind
+    id: str = Field(min_length=1, max_length=120)
+
+    model_config = {"extra": "forbid"}
+
+
 class TrackingEntryPayload(BaseModel):
-    item_id: str = Field(min_length=1, max_length=120)
-    owned_item_id: str | None = Field(default=None, min_length=1, max_length=120)
-    edition_id: str | None = Field(default=None, min_length=1, max_length=120)
-    variant_id: str | None = Field(default=None, min_length=1, max_length=120)
+    catalog_ref: CatalogEntityRefPayload
+    owned_ref: OwnedItemRefPayload | None = None
     source_type: TrackingSourceType | None = None
     status: str | None = Field(default=None, min_length=1, max_length=64)
     rating: int | None = Field(default=None, ge=0, le=10)
@@ -56,8 +65,10 @@ class TrackingEntryPayload(BaseModel):
     progress_current: int | None = Field(default=None, ge=0)
     times_completed: int | None = Field(default=None, ge=0)
     notes: str | None = Field(default=None, max_length=4000)
-    season_number: int | None = Field(default=None, ge=0)
-    episode_number: int | None = Field(default=None, ge=0)
+
+    # Kind-owned tracking codecs may add fields such as pages, chapters, or
+    # issue coordinates; the shared service does not interpret those values.
+    model_config = {"extra": "allow"}
 
     @field_validator("started_at", "finished_at")
     @classmethod
@@ -88,57 +99,15 @@ class TrackingEntryPayload(BaseModel):
         return value
 
 
-class _PersonalEntityPayload(BaseModel):
-    item_id: str = Field(min_length=1, max_length=120)
-    anchor_type: PersonalAnchorType | None = None
-    edition_id: str | None = Field(default=None, min_length=1, max_length=120)
-    variant_id: str | None = Field(default=None, min_length=1, max_length=120)
-    bundle_release_id: str | None = Field(default=None, min_length=1, max_length=120)
+class _CatalogTargetPayload(BaseModel):
+    catalog_ref: CatalogEntityRefPayload
+    target_ref: CatalogEntityRefPayload | None = None
 
-    @field_validator("anchor_type", mode="before")
-    @classmethod
-    def normalize_anchor_type(cls, value: str | None) -> PersonalAnchorType | None:
-        return normalize_personal_anchor_type(value)
-
-    @model_validator(mode="after")
-    def validate_anchor_fields(self) -> "_PersonalEntityPayload":
-        has_edition = _has_anchor_value(self.edition_id)
-        has_variant = _has_anchor_value(self.variant_id)
-        has_bundle_release = _has_anchor_value(self.bundle_release_id)
-
-        if has_bundle_release:
-            if self.anchor_type not in (None, "bundle_release"):
-                raise ValueError(
-                    "bundle_release_id requires anchor_type 'bundle_release'"
-                )
-            self.anchor_type = "bundle_release"
-        if self.anchor_type == "bundle_release" and not self.bundle_release_id:
-            raise ValueError(
-                "bundle_release_id is required when anchor_type is 'bundle_release'"
-            )
-
-        if has_variant:
-            self.anchor_type = "variant"
-            return self
-
-        if has_edition:
-            if self.anchor_type not in (None, "edition", "variant"):
-                raise ValueError(
-                    "edition_id is only compatible with anchor_type 'edition' or 'variant'"
-                )
-            self.anchor_type = "edition"
-            return self
-
-        if self.anchor_type == "edition":
-            raise ValueError("edition_id is required when anchor_type is 'edition'")
-        if self.anchor_type == "variant":
-            raise ValueError(
-                "variant_id or edition_id is required when anchor_type is 'variant'"
-            )
-        return self
+    model_config = {"extra": "forbid"}
 
 
-class OwnedItemPayload(_PersonalEntityPayload):
+class OwnedItemPayload(_CatalogTargetPayload):
+    created_at: datetime | None = None
     is_digital: bool | None = None
     condition: str | None = Field(default=None, min_length=1, max_length=120)
     grade: str | None = Field(default=None, min_length=1, max_length=64)
@@ -171,7 +140,10 @@ class OwnedItemPayload(_PersonalEntityPayload):
     last_bag_board_date: datetime | None = None
     market_value_cents: int | None = Field(default=None, ge=0)
 
-    @field_validator("purchase_date", "started_at", "finished_at", "sold_at", "last_bag_board_date")
+    # The owning kind may add typed, kind-specific copy details.
+    model_config = {"extra": "allow"}
+
+    @field_validator("created_at", "purchase_date", "started_at", "finished_at", "sold_at", "last_bag_board_date")
     @classmethod
     def normalize_datetimes(cls, value: datetime | None) -> datetime | None:
         return as_utc(value) if value else None
@@ -185,7 +157,7 @@ class OwnedItemPayload(_PersonalEntityPayload):
         return value
 
 
-class WishlistItemPayload(_PersonalEntityPayload):
+class WishlistItemPayload(_CatalogTargetPayload):
     target_price_cents: int | None = Field(default=None, ge=0)
     currency: str | None = Field(default=None, min_length=1, max_length=16)
     notes: str | None = Field(default=None, max_length=4000)
@@ -198,7 +170,7 @@ class WishlistItemPayload(_PersonalEntityPayload):
 
 
 class WatchSessionPayload(BaseModel):
-    item_id: str = Field(min_length=1, max_length=120)
+    catalog_ref: CatalogEntityRefPayload
     tracking_entry_id: str | None = Field(default=None, min_length=1, max_length=120)
     season_number: int | None = Field(default=None, ge=0)
     episode_number: int | None = Field(default=None, ge=0)
@@ -208,6 +180,8 @@ class WatchSessionPayload(BaseModel):
     rating: int | None = Field(default=None, ge=0, le=10)
     notes: str | None = Field(default=None, max_length=4000)
 
+    model_config = {"extra": "allow"}
+
     @field_validator("watched_at")
     @classmethod
     def normalize_watched_at(cls, value: datetime) -> datetime:
@@ -215,22 +189,23 @@ class WatchSessionPayload(BaseModel):
 
 
 class MetadataOverridePayload(BaseModel):
-    item_id: str = Field(min_length=1, max_length=120)
-    edition_id: str | None = Field(default=None, min_length=1, max_length=120)
-    variant_id: str | None = Field(default=None, min_length=1, max_length=120)
-    field_path: str = Field(min_length=1, max_length=255)
+    target_ref: CatalogEntityRefPayload
+    field_key: str = Field(min_length=1, max_length=255)
     original_value: str | None = Field(default=None, max_length=8000)
     override_value: str = Field(min_length=0, max_length=8000)
 
 
 class CustomEpisodePayload(BaseModel):
-    item_id: str = Field(min_length=1, max_length=120)
+    catalog_ref: CatalogEntityRefPayload
     season_number: int = Field(ge=0, le=9999)
     episode_number: int = Field(ge=0, le=99999)
     title: str = Field(min_length=1, max_length=500)
-    overview: str | None = Field(default=None, max_length=8000)
+    description: str | None = Field(default=None, max_length=8000)
     air_date: str | None = Field(default=None, max_length=30)
     runtime_minutes: int | None = Field(default=None, ge=0, le=99999)
+    still_image_url: str | None = Field(default=None, max_length=2048)
+    local_image_path: str | None = Field(default=None, max_length=4096)
+    thumbnail_image_url: str | None = Field(default=None, max_length=2048)
 
 
 class PickListValuePayload(BaseModel):
@@ -240,8 +215,29 @@ class PickListValuePayload(BaseModel):
     sort_order: int = Field(default=0, ge=0)
 
 
+class LocationPayload(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    parent_id: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=2000)
+    sort_order: int = Field(default=0, ge=0)
+
+
+class TrackingUnitPayload(BaseModel):
+    catalog_ref: CatalogEntityRefPayload
+    tracking_entry_id: str | None = Field(default=None, min_length=1, max_length=120)
+    owned_ref: OwnedItemRefPayload | None = None
+    completed_at: datetime
+
+    model_config = {"extra": "allow"}
+
+    @field_validator("completed_at")
+    @classmethod
+    def normalize_completed_at(cls, value: datetime) -> datetime:
+        return as_utc(value)
+
+
 class SyncChangeIn(BaseModel):
-    entity_type: str = Field(min_length=1, max_length=80)
+    entity_type: SyncEntityType
     entity_id: str = Field(min_length=1, max_length=120)
     action: SyncAction
     client_change_id: str | None = Field(default=None, min_length=1, max_length=120)
@@ -266,6 +262,8 @@ class SyncChangeIn(BaseModel):
             return OwnedItemPayload.model_validate(value).model_dump(exclude_none=True)
         if entity_type == "wishlist_item":
             return WishlistItemPayload.model_validate(value).model_dump(exclude_none=True)
+        if entity_type == "tracking_unit":
+            return TrackingUnitPayload.model_validate(value).model_dump(exclude_none=True)
         if entity_type == "watch_session":
             return WatchSessionPayload.model_validate(value).model_dump(exclude_none=True)
         if entity_type == "metadata_override":
@@ -274,6 +272,8 @@ class SyncChangeIn(BaseModel):
             return CustomEpisodePayload.model_validate(value).model_dump(exclude_none=True)
         if entity_type == "pick_list_value":
             return PickListValuePayload.model_validate(value).model_dump(exclude_none=True)
+        if entity_type == "location":
+            return LocationPayload.model_validate(value).model_dump(exclude_none=True)
         return value
 
 
