@@ -5,10 +5,18 @@ import pytest
 from collectarr_sync.db import connect
 
 
-def _owned_item_payload(**overrides):
-    payload = {"item_id": "comic-1", "quantity": 1, "key_comic": False}
+def _owned_copy_payload(**overrides):
+    payload = {
+        "catalog_ref": {"kind": "comic", "entity_type": "work", "id": "comic-1"},
+        "quantity": 1,
+        "key_comic": False,
+    }
     payload.update(overrides)
     return payload
+
+
+def _catalog_item_ref(kind: str, item_id: str) -> dict[str, str]:
+    return {"kind": kind, "entity_type": "work", "id": item_id}
 
 
 @pytest.mark.asyncio
@@ -27,15 +35,13 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
             "device_id": "desktop",
             "changes": [
                 {
-                    "entity_type": "owned_item",
+                    "entity_type": "owned_copy",
                     "entity_id": "owned-1",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:00:00Z",
                     "payload": {
-                        "item_id": "comic-1",
+                        "catalog_ref": _catalog_item_ref("comic", "comic-1"),
                         "is_digital": True,
-                        "anchor_type": "bundle_release",
-                        "bundle_release_id": "bundle-1",
                         "condition": "Near Mint",
                         "grade": "9.8",
                     },
@@ -54,8 +60,9 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
     assert data["entities"][0]["entity_id"] == "owned-1"
     assert data["entities"][0]["payload"]["is_digital"] is True
     assert data["entities"][0]["payload"]["grade"] == "9.8"
-    assert data["entities"][0]["payload"]["anchor_type"] == "bundle_release"
-    assert data["entities"][0]["payload"]["bundle_release_id"] == "bundle-1"
+    assert data["entities"][0]["payload"]["catalog_ref"] == _catalog_item_ref(
+        "comic", "comic-1"
+    )
     assert data["changes"] == []
 
     incremental = await client.post(
@@ -80,12 +87,10 @@ async def test_push_then_pull_returns_tracking_entry(client, sync_headers):
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:05:00Z",
                     "payload": {
-                        "item_id": "movie-1",
+                        "catalog_ref": _catalog_item_ref("movie", "movie-1"),
                         "source_type": "digital",
                         "status": "Watching",
                         "rating": 8,
-                        "edition_id": "edition-stream",
-                        "variant_id": "variant-4k"
                     },
                 }
             ],
@@ -101,10 +106,10 @@ async def test_push_then_pull_returns_tracking_entry(client, sync_headers):
     entity = pull.json()["entities"][0]
     assert entity["entity_type"] == "tracking_entry"
     assert entity["entity_id"] == "tracking-1"
-    assert entity["payload"]["item_id"] == "movie-1"
+    assert entity["payload"]["catalog_ref"] == _catalog_item_ref(
+        "movie", "movie-1"
+    )
     assert entity["payload"]["source_type"] == "digital"
-    assert entity["payload"]["edition_id"] == "edition-stream"
-    assert entity["payload"]["variant_id"] == "variant-4k"
 
 
 @pytest.mark.asyncio
@@ -121,10 +126,10 @@ async def test_push_rejects_invalid_tracking_entry_payload(client, sync_headers)
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:05:00Z",
                     "payload": {
-                        "item_id": "movie-1",
+                        "catalog_ref": _catalog_item_ref("movie", "movie-1"),
                         "rating": 11,
                         "progress_current": 8,
-                        "progress_total": 4
+                        "progress_total": 4,
                     },
                 }
             ],
@@ -148,7 +153,7 @@ async def test_push_rejects_tracking_entry_progress_above_total(client, sync_hea
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:05:00Z",
                     "payload": {
-                        "item_id": "movie-1",
+                        "catalog_ref": _catalog_item_ref("movie", "movie-1"),
                         "rating": 8,
                         "progress_current": 8,
                         "progress_total": 4,
@@ -199,7 +204,7 @@ async def test_push_rejects_unknown_tracking_source_type(client, sync_headers):
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:05:00Z",
                     "payload": {
-                        "item_id": "movie-1",
+                        "catalog_ref": _catalog_item_ref("movie", "movie-1"),
                         "source_type": "kindle",
                         "status": "Reading",
                     },
@@ -244,7 +249,7 @@ async def test_catalog_item_snapshots_are_not_sync_entities(client, sync_headers
 
 
 @pytest.mark.asyncio
-async def test_push_then_pull_returns_wishlist_bundle_anchor(client, sync_headers):
+async def test_push_then_pull_returns_wishlist_catalog_item(client, sync_headers):
     response = await client.post(
         "/sync/push",
         headers=sync_headers,
@@ -257,9 +262,7 @@ async def test_push_then_pull_returns_wishlist_bundle_anchor(client, sync_header
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:00:00Z",
                     "payload": {
-                        "item_id": "comic-1",
-                        "anchor_type": "bundle_release",
-                        "bundle_release_id": "bundle-42",
+                        "catalog_ref": _catalog_item_ref("comic", "comic-1"),
                         "notes": "Want the slipcase",
                     },
                 }
@@ -273,12 +276,13 @@ async def test_push_then_pull_returns_wishlist_bundle_anchor(client, sync_header
     assert pull.status_code == 200
     entity = pull.json()["entities"][0]
     assert entity["entity_type"] == "wishlist_item"
-    assert entity["payload"]["anchor_type"] == "bundle_release"
-    assert entity["payload"]["bundle_release_id"] == "bundle-42"
+    assert entity["payload"]["catalog_ref"] == _catalog_item_ref(
+        "comic", "comic-1"
+    )
 
 
 @pytest.mark.asyncio
-async def test_push_normalizes_personal_anchor_to_edition_when_only_edition_id_exists(
+async def test_push_rejects_owned_copy_without_catalog_item_reference(
     client, sync_headers
 ):
     response = await client.post(
@@ -288,14 +292,11 @@ async def test_push_normalizes_personal_anchor_to_edition_when_only_edition_id_e
             "device_id": "desktop",
             "changes": [
                 {
-                    "entity_type": "owned_item",
+                    "entity_type": "owned_copy",
                     "entity_id": "owned-3",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:00:00Z",
                     "payload": {
-                        "item_id": "comic-1",
-                        "anchor_type": "variant",
-                        "edition_id": "edition-deluxe",
                         "condition": "Near Mint",
                     },
                 }
@@ -303,18 +304,15 @@ async def test_push_normalizes_personal_anchor_to_edition_when_only_edition_id_e
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 422
     pull = await client.post("/sync/pull", headers=sync_headers, json={})
 
     assert pull.status_code == 200
-    entity = pull.json()["entities"][0]
-    assert entity["payload"]["anchor_type"] == "edition"
-    assert entity["payload"]["edition_id"] == "edition-deluxe"
-    assert "variant_id" not in entity["payload"]
+    assert pull.json()["entities"] == []
 
 
 @pytest.mark.asyncio
-async def test_push_rejects_bundle_anchor_without_bundle_release_id(client, sync_headers):
+async def test_push_rejects_unknown_catalog_kind(client, sync_headers):
     response = await client.post(
         "/sync/push",
         headers=sync_headers,
@@ -322,13 +320,16 @@ async def test_push_rejects_bundle_anchor_without_bundle_release_id(client, sync
             "device_id": "desktop",
             "changes": [
                 {
-                    "entity_type": "owned_item",
+                    "entity_type": "owned_copy",
                     "entity_id": "owned-2",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:00:00Z",
                     "payload": {
-                        "item_id": "comic-1",
-                        "anchor_type": "bundle_release",
+                        "catalog_ref": {
+                            "kind": "unknown",
+                            "entity_type": "work",
+                            "id": "comic-1",
+                        },
                     },
                 }
             ],
@@ -350,11 +351,11 @@ async def test_sync_status_reports_counts(client, sync_headers):
             "device_id": "desktop",
             "changes": [
                 {
-                    "entity_type": "owned_item",
+                    "entity_type": "owned_copy",
                     "entity_id": "owned-1",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:00:00Z",
-                    "payload": {"item_id": "comic-1"},
+                    "payload": _owned_copy_payload(),
                 }
             ],
         },
@@ -376,7 +377,7 @@ async def test_sync_status_reports_counts(client, sync_headers):
 @pytest.mark.asyncio
 async def test_sync_devices_reports_seen_devices(client, sync_headers):
     for device_id, entity_type, entity_id in [
-        ("desktop", "owned_item", "comic-1"),
+        ("desktop", "owned_copy", "comic-1"),
         ("phone", "wishlist_item", "comic-2"),
     ]:
         await client.post(
@@ -390,7 +391,9 @@ async def test_sync_devices_reports_seen_devices(client, sync_headers):
                         "entity_id": entity_id,
                         "action": "upsert",
                         "client_changed_at": "2026-05-12T08:00:00Z",
-                        "payload": {"item_id": entity_id},
+                        "payload": {
+                            "catalog_ref": _catalog_item_ref("comic", entity_id)
+                        },
                     }
                 ],
             },
@@ -418,11 +421,11 @@ async def test_stale_client_change_is_rejected(client, sync_headers):
             "device_id": "desktop",
             "changes": [
                 {
-                    "entity_type": "owned_item",
+                    "entity_type": "owned_copy",
                     "entity_id": "owned-1",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T12:00:00Z",
-                    "payload": _owned_item_payload(grade="9.8"),
+                    "payload": _owned_copy_payload(grade="9.8"),
                 }
             ],
         },
@@ -435,11 +438,11 @@ async def test_stale_client_change_is_rejected(client, sync_headers):
             "device_id": "android",
             "changes": [
                 {
-                    "entity_type": "owned_item",
+                    "entity_type": "owned_copy",
                     "entity_id": "owned-1",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T11:00:00Z",
-                    "payload": _owned_item_payload(grade="9.4"),
+                    "payload": _owned_copy_payload(grade="9.4"),
                 }
             ],
         },
@@ -450,7 +453,7 @@ async def test_stale_client_change_is_rejected(client, sync_headers):
     assert data["accepted"] == []
     assert data["rejected"][0]["reason"] == "server_has_newer_client_change"
     assert data["rejected"][0]["current_action"] == "upsert"
-    assert data["rejected"][0]["current_payload"] == _owned_item_payload(grade="9.8")
+    assert data["rejected"][0]["current_payload"] == _owned_copy_payload(grade="9.8")
 
 
 @pytest.mark.asyncio
@@ -503,7 +506,7 @@ async def test_push_prunes_old_change_log_entries(client, sync_headers):
             """,
             (
                 "old-change",
-                "owned_item",
+                "owned_copy",
                 "owned-old",
                 "upsert",
                 "{}",
@@ -543,11 +546,11 @@ async def test_multi_device_conflict_includes_service_state(client, sync_headers
             "device_id": "device-A",
             "changes": [
                 {
-                    "entity_type": "owned_item",
+                    "entity_type": "owned_copy",
                     "entity_id": "shared-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": _owned_item_payload(grade="9.0"),
+                    "payload": _owned_copy_payload(grade="9.0"),
                 }
             ],
         },
@@ -561,11 +564,11 @@ async def test_multi_device_conflict_includes_service_state(client, sync_headers
             "device_id": "device-B",
             "changes": [
                 {
-                    "entity_type": "owned_item",
+                    "entity_type": "owned_copy",
                     "entity_id": "shared-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T09:00:00Z",
-                    "payload": _owned_item_payload(grade="8.5"),
+                    "payload": _owned_copy_payload(grade="8.5"),
                 }
             ],
         },
@@ -580,7 +583,7 @@ async def test_multi_device_conflict_includes_service_state(client, sync_headers
     assert rejected["entity_id"] == "shared-1"
     assert rejected["reason"] == "server_has_newer_client_change"
     assert rejected["current_payload"]["grade"] == "9.0"
-    assert rejected["current_payload"]["item_id"] == "comic-1"
+    assert rejected["current_payload"]["catalog_ref"]["id"] == "comic-1"
     assert rejected["current_action"] == "upsert"
 
 
@@ -595,11 +598,11 @@ async def test_retry_after_conflict_with_newer_timestamp(client, sync_headers):
             "device_id": "device-A",
             "changes": [
                 {
-                    "entity_type": "owned_item",
+                    "entity_type": "owned_copy",
                     "entity_id": "retry-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": _owned_item_payload(grade="9.0"),
+                    "payload": _owned_copy_payload(grade="9.0"),
                 }
             ],
         },
@@ -613,11 +616,11 @@ async def test_retry_after_conflict_with_newer_timestamp(client, sync_headers):
             "device_id": "device-B",
             "changes": [
                 {
-                    "entity_type": "owned_item",
+                    "entity_type": "owned_copy",
                     "entity_id": "retry-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T11:00:00Z",
-                    "payload": _owned_item_payload(grade="8.5"),
+                    "payload": _owned_copy_payload(grade="8.5"),
                 }
             ],
         },
@@ -638,11 +641,11 @@ async def test_remove_device_clears_change_history(client, sync_headers):
             "device_id": "old-phone",
             "changes": [
                 {
-                    "entity_type": "owned_item",
+                    "entity_type": "owned_copy",
                     "entity_id": "phone-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": {"item_id": "comic-1"},
+                    "payload": _owned_copy_payload(),
                 }
             ],
         },
@@ -717,12 +720,12 @@ async def test_push_is_idempotent_with_client_change_id(client, sync_headers):
         "device_id": "device-1",
         "changes": [
             {
-                "entity_type": "owned_item",
+                "entity_type": "owned_copy",
                 "entity_id": "owned-1",
                 "action": "upsert",
                 "client_change_id": "op-123",
                 "client_changed_at": "2026-01-15T10:00:00Z",
-                "payload": {"item_id": "comic-1", "condition": "Near Mint"},
+                "payload": _owned_copy_payload(condition="Near Mint"),
             }
         ],
     }
@@ -758,14 +761,14 @@ async def test_status_reports_entity_tombstone_change_counts(client, sync_header
             "device_id": "desktop",
             "changes": [
                 {
-                    "entity_type": "owned_item",
+                    "entity_type": "owned_copy",
                     "entity_id": "stat-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": _owned_item_payload(),
+                    "payload": _owned_copy_payload(),
                 },
                 {
-                    "entity_type": "owned_item",
+                    "entity_type": "owned_copy",
                     "entity_id": "stat-2",
                     "action": "delete",
                     "client_changed_at": "2026-06-01T10:00:00Z",
@@ -808,7 +811,7 @@ async def test_pull_prunes_old_change_log_entries(client, sync_headers):
             """,
             (
                 "old-change",
-                "owned_item",
+                "owned_copy",
                 "owned-old",
                 "upsert",
                 "{}",

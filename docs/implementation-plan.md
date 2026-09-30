@@ -8,9 +8,9 @@ The personal record key is scoped by authenticated user, `entity_type`, and `ent
 
 ## Supported v1 entities
 
-The supported entity types are defined by `collectarr_sync.schemas.SyncEntityType` and documented in [the protocol contract](protocol-contract.md): owned items, wishlist items, tracking entries and units, watch sessions, custom episodes, metadata overrides, locations, and pick-list values.
+The supported entity types are defined by `collectarr_sync.schemas.SyncEntityType` and documented in [the protocol contract](protocol-contract.md): owned copies, wishlist items, tracking entries and units, watch sessions, custom episodes, metadata overrides, locations, and pick-list values.
 
-`library_item_snapshot` was removed because it copied canonical catalog data into Sync. This does not remove sync for owned copies, wishlist, tracking, sessions, or other supported personal records.
+Sync stores only App-owned personal state. Catalog Item records are fetched from Core and are not written to Sync.
 
 Loans, folders, reading queues, custom-field values, and personal images are not currently cross-device Sync entities. Add each only with an App queue producer, typed v1 payload, apply/retry handling, conflict behavior, and protocol documentation.
 
