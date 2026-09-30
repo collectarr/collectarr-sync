@@ -15,11 +15,18 @@ def _owned_change(entity_id: str, condition: str) -> dict:
         "device_id": "device-1",
         "changes": [
             {
-                "entity_type": "owned_item",
+                "entity_type": "owned_copy",
                 "entity_id": entity_id,
                 "action": "upsert",
                 "client_changed_at": "2026-01-15T10:00:00Z",
-                "payload": {"item_id": "comic-1", "condition": condition},
+                "payload": {
+                    "catalog_ref": {
+                        "kind": "comic",
+                        "entity_type": "work",
+                        "id": "comic-1",
+                    },
+                    "condition": condition,
+                },
             }
         ],
     }

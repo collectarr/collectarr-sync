@@ -4,7 +4,7 @@
 
 Collectarr Sync stores App-owned personal state only. Core remains the source-neutral catalog API. Sync never stores or distributes canonical catalog records, catalog snapshots, provider identifiers, provider envelopes, ingest jobs, or provider provenance.
 
-Each change is scoped by the authenticated Sync user, `entity_type`, and `entity_id`. A catalog reference is an explicit object containing `kind`, `entity_type`, and `id`, with optional `root_id` and `parent_id` for a retained kind-owned child. An owned reference is `{ "kind": "...", "id": "..." }`. Payloads do not use `item_id`, `anchor_type`, `edition_id`, `variant_id`, or `bundle_release_id` as substitute identity fields.
+Each change is scoped by the authenticated Sync user, `entity_type`, and `entity_id`. A catalog reference identifies one concrete Catalog Item by kind and ID. An owned-copy reference identifies one App-owned copy by kind and copy ID. Kind-owned child coordinates are explicit payload fields; they do not create another top-level catalog identity.
 
 ## Version
 
@@ -35,11 +35,11 @@ Each pushed change has `entity_type`, `entity_id`, `action` (`upsert` or `delete
 
 ## Supported personal entities
 
-`owned_item` represents an App-owned copy and remains a first-class Sync entity. It carries the copy's personal fields and a reference to its Core Catalog Item. Removing the former `library_item_snapshot` entity removes duplicated canonical catalog data from Sync; it does not remove owned-copy, wishlist, tracking, session, or other personal-state synchronization.
+`owned_copy` represents an App-owned copy as a first-class Sync entity. It carries the copy's personal fields and a reference to its Core Catalog Item. Catalog records remain owned by Core; Sync carries owned copies, wishlist entries, tracking, sessions, and other explicitly supported personal state.
 
 | Entity type | Payload identity and contents |
 |---|---|
-| `owned_item` | `catalog_ref`, optional `target_ref`, and the user's copy fields such as condition, purchase details, location, notes, and kind-owned copy details. |
+| `owned_copy` | `catalog_ref`, optional `target_ref`, and the user's copy fields such as condition, purchase details, location, notes, and kind-owned copy details. |
 | `wishlist_item` | `catalog_ref`, target price, currency, notes, and creation time. |
 | `tracking_entry` | `catalog_ref`, optional `owned_ref`, status, rating, dates, progress, notes, and kind-owned progress fields. |
 | `tracking_unit` | `catalog_ref`, optional `owned_ref` and `tracking_entry_id`, completion time, plus kind-owned unit coordinates. |

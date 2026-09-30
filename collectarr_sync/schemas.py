@@ -17,7 +17,7 @@ MediaKind = Literal[
     "tv",
 ]
 SyncEntityType = Literal[
-    "owned_item",
+    "owned_copy",
     "wishlist_item",
     "tracking_entry",
     "tracking_unit",
@@ -46,7 +46,7 @@ class CatalogEntityRefPayload(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-class OwnedItemRefPayload(BaseModel):
+class OwnedCopyRefPayload(BaseModel):
     kind: MediaKind
     id: str = Field(min_length=1, max_length=120)
 
@@ -55,7 +55,7 @@ class OwnedItemRefPayload(BaseModel):
 
 class TrackingEntryPayload(BaseModel):
     catalog_ref: CatalogEntityRefPayload
-    owned_ref: OwnedItemRefPayload | None = None
+    owned_ref: OwnedCopyRefPayload | None = None
     source_type: TrackingSourceType | None = None
     status: str | None = Field(default=None, min_length=1, max_length=64)
     rating: int | None = Field(default=None, ge=0, le=10)
@@ -106,7 +106,7 @@ class _CatalogTargetPayload(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-class OwnedItemPayload(_CatalogTargetPayload):
+class OwnedCopyPayload(_CatalogTargetPayload):
     created_at: datetime | None = None
     is_digital: bool | None = None
     condition: str | None = Field(default=None, min_length=1, max_length=120)
@@ -225,7 +225,7 @@ class LocationPayload(BaseModel):
 class TrackingUnitPayload(BaseModel):
     catalog_ref: CatalogEntityRefPayload
     tracking_entry_id: str | None = Field(default=None, min_length=1, max_length=120)
-    owned_ref: OwnedItemRefPayload | None = None
+    owned_ref: OwnedCopyRefPayload | None = None
     completed_at: datetime
 
     model_config = {"extra": "allow"}
@@ -258,8 +258,8 @@ class SyncChangeIn(BaseModel):
             return value
         if entity_type == "tracking_entry":
             return TrackingEntryPayload.model_validate(value).model_dump(exclude_none=True)
-        if entity_type == "owned_item":
-            return OwnedItemPayload.model_validate(value).model_dump(exclude_none=True)
+        if entity_type == "owned_copy":
+            return OwnedCopyPayload.model_validate(value).model_dump(exclude_none=True)
         if entity_type == "wishlist_item":
             return WishlistItemPayload.model_validate(value).model_dump(exclude_none=True)
         if entity_type == "tracking_unit":
