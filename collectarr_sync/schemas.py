@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 SyncAction = Literal["upsert", "delete"]
 TrackingSourceType = Literal["physical", "digital", "streaming"]
@@ -34,6 +34,12 @@ def as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def _reject_target_ref_alias(value: Any) -> Any:
+    if isinstance(value, dict) and "target_ref" in value:
+        raise ValueError("target_ref is not supported; use catalog_ref")
+    return value
 
 
 class CatalogEntityRefPayload(BaseModel):
@@ -69,6 +75,11 @@ class TrackingEntryPayload(BaseModel):
     # Kind-owned tracking codecs may add fields such as pages, chapters, or
     # issue coordinates; the shared service does not interpret those values.
     model_config = {"extra": "allow"}
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_target_ref_alias(cls, value: Any) -> Any:
+        return _reject_target_ref_alias(value)
 
     @field_validator("started_at", "finished_at")
     @classmethod
@@ -182,6 +193,11 @@ class WatchSessionPayload(BaseModel):
 
     model_config = {"extra": "allow"}
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_target_ref_alias(cls, value: Any) -> Any:
+        return _reject_target_ref_alias(value)
+
     @field_validator("watched_at")
     @classmethod
     def normalize_watched_at(cls, value: datetime) -> datetime:
@@ -229,6 +245,11 @@ class TrackingUnitPayload(BaseModel):
     completed_at: datetime
 
     model_config = {"extra": "allow"}
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_target_ref_alias(cls, value: Any) -> Any:
+        return _reject_target_ref_alias(value)
 
     @field_validator("completed_at")
     @classmethod

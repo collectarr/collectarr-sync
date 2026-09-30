@@ -51,6 +51,8 @@ Each pushed change has `entity_type`, `entity_id`, `action` (`upsert` or `delete
 
 The accepted entity set is explicit. Unknown entity types and removed snapshot or anchor payloads are rejected. Loans, folders, reading queues, custom-field values, and personal images must be added to this contract together with their App queue producers before they can be advertised as cross-device Sync features.
 
+Tracking entries, tracking units, and watch sessions require `catalog_ref`. The removed `target_ref` spelling is not accepted as an alias; kind-specific episode and chapter coordinates remain separate payload fields.
+
 ## Conflict handling and deletes
 
 The service uses last-write-wins by `client_changed_at` within a user's entity key. A stale write is rejected with the winning service payload so the client can review or retry it. A delete is stored as a tombstone until a newer upsert replaces it. The append-only change log is retained for `SYNC_CHANGE_RETENTION_DAYS` (default 90); pruning old changes does not remove current entity state or tombstones.
