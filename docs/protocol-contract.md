@@ -39,7 +39,7 @@ Each pushed change has `entity_type`, `entity_id`, `action` (`upsert` or `delete
 
 | Entity type | Payload identity and contents |
 |---|---|
-| `owned_copy` | `catalog_ref`, optional `target_ref`, and the user's copy fields such as condition, purchase details, location, notes, and kind-owned copy details. |
+| `owned_copy` | `catalog_ref`, an optional `target_ref` only when that kind has a distinct owned target below the Catalog Item, and the user's copy fields such as condition, purchase details, location, notes, and kind-owned copy details. Music copies target one concrete album Catalog Item and omit `target_ref`. |
 | `wishlist_item` | `catalog_ref`, target price, currency, notes, and creation time. |
 | `tracking_entry` | `catalog_ref`, optional `owned_ref`, status, rating, dates, progress, notes, and kind-owned progress fields. |
 | `tracking_unit` | `catalog_ref`, optional `owned_ref` and `tracking_entry_id`, completion time, plus kind-owned unit coordinates. |
