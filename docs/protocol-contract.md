@@ -4,7 +4,7 @@
 
 Collectarr Sync stores App-owned personal state only. Core remains the source-neutral catalog API. Sync never stores or distributes canonical catalog records, catalog snapshots, provider identifiers, provider envelopes, ingest jobs, or provider provenance.
 
-Each change is scoped by the authenticated Sync user, `entity_type`, and `entity_id`. A catalog reference identifies one concrete Catalog Item by kind and ID. An owned-copy reference identifies one App-owned copy by kind and copy ID. Kind-owned child coordinates are explicit payload fields; they do not create another top-level catalog identity.
+Each change is scoped by the authenticated Sync user, `entity_type`, and `entity_id`. A catalog reference is serialized as `{ "kind": "...", "entity_type": "...", "id": "..." }`, with optional `root_id` and `parent_id` when a kind-owned child reference needs its structural context. Sync treats those identifiers as opaque and does not impose a shared Work/Release hierarchy. An owned-copy reference is `{ "kind": "...", "id": "..." }`.
 
 ## Version
 
