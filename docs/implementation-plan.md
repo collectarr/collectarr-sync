@@ -2,25 +2,47 @@
 
 ## Ownership boundary
 
-Collectarr Sync mirrors App-owned personal records between a user's devices. Collectarr Core owns canonical Catalog Items and their real kind-owned children. Sync does not store catalog snapshots, provider IDs, provider envelopes, import jobs, or provider provenance.
+Collectarr Sync stores App-owned library entries and personal state between a
+user's devices. Each `library_entry` is one complete, independently editable
+local record. Core provenance is optional and represented by
+`source_catalog_ref`; the entry does not depend on a separate Catalog Item at
+another device. Catalog data, personal data, and timestamps travel together in
+the entry payload. Canonical Core data is never written to or read from Sync as
+a separate entity.
 
-The personal record key is scoped by authenticated user, `entity_type`, and `entity_id`. Payload references identify either a catalog target or an owned copy. Deletes remain tombstones; conflict handling remains last-write-wins by client timestamp.
+The record key is scoped by authenticated user, `entity_type`, and
+`entity_id`. Updates use last-write-wins by the client timestamp. Deletes are
+tombstones. Retries can use `client_change_id` for idempotency. User isolation
+applies to the current entity, change log, status, device history, and device
+removal operations.
 
-## Supported v1 entities
+## Supported protocol
 
-The supported entity types are defined by `collectarr_sync.schemas.SyncEntityType` and documented in [the protocol contract](protocol-contract.md): owned copies, wishlist items, tracking entries and units, watch sessions, custom episodes, metadata overrides, locations, and pick-list values.
+The supported entity types and exact payloads are maintained in
+[`protocol-contract.md`](protocol-contract.md) and validated in
+`collectarr_sync.schemas`. The App producers, Sync validators, pull/apply path,
+and retry mapper must agree on every entity before it is advertised as a
+cross-device feature.
 
-Sync stores only App-owned personal state. Catalog Item records are fetched from Core and are not written to Sync.
-
-Loans, folders, reading queues, custom-field values, and personal images are not currently cross-device Sync entities. Add each only with an App queue producer, typed v1 payload, apply/retry handling, conflict behavior, and protocol documentation.
+Personal entry data stays in `library_entry.personal_data`. Standalone history
+records may use `library_entry_ref` when they target one specific local entry.
+Catalog-origin metadata is represented only by `source_catalog_ref` in the
+entry envelope. Sync does not accept Work/Release nodes, nested target paths,
+provider IDs, provider snapshots, or ingest jobs.
 
 ## Coordinated reset
 
-The v1 wire contract and SQLite store do not accept the old catalog-snapshot or Work/Release anchor payloads. Do not migrate or reset a deployed database as part of implementation. For a fresh development instance, stop Sync, preserve any existing database and SQLite sidecars as a separate backup, then configure a new empty database path for v1. See [the deployment and reset guide](sync.md).
+Wire protocol v1 and the SQLite schema v1 are created on a new, empty database
+path. Do not migrate, overwrite, or delete an existing deployment database as
+part of implementation. For a fresh development instance, stop Sync, preserve
+the old database and any SQLite sidecars separately, then configure a new
+empty path. See [`sync.md`](sync.md) for the operational setup.
 
 ## Completion checks
 
-- App queue producers and Sync schemas agree on every supported entity and reference.
-- User isolation, scoped entity identity, last-write-wins conflicts, and tombstones remain intact.
-- No Sync path reads or writes canonical Core catalog data.
-- README, this scope, and the protocol contract describe the same supported entity set.
+- App queue producers send complete `library_entry` payloads.
+- Push, pull, retries, conflicts, and tombstones preserve the entry identity
+  and complete payload.
+- User isolation remains enforced for every operation.
+- Sync does not store canonical Core catalog entities as separate records.
+- README and both protocol documents describe the same supported entity set.

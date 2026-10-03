@@ -31,7 +31,8 @@ state remains local-first in `collectarr-app`.
 - Stable device identity for multi-device sync and pairing flows
 - Rejection of stale local writes when another device already committed newer state
 - Conflict payloads detailed enough for `collectarr-app` to review and recover instead of silently overwriting data
-- Personal-data-only scope so Sync never turns into a second metadata backend
+- No standalone Core catalog entities; complete local entry snapshots carry
+  their kind metadata alongside personal fields
 
 ### 🧰 Operations And Backup
 
@@ -134,12 +135,12 @@ field alignment with the shared Core contract.
 See [docs/protocol-contract.md](docs/protocol-contract.md) for the v1 payload
 contract and [docs/sync.md](docs/sync.md) for deployment and reset guidance.
 
-Near-term Sync work:
+Current Sync work:
 
 - make pairing reliable enough for MVP with manual code, QR render, and clear LAN setup docs
 - deepen conflict actions beyond review: keep service, keep local, retry local, and surface stale-client causes clearly
 - harden backup/restore around the SQLite database, WAL files, and service health checks
-- expand the typed personal payload set alongside App queue producers for loans, folders, reading queues, custom-field values, and personal images
+- keep the v1 personal payload contract aligned with App queue producers and attachment snapshots
 - keep the service intentionally personal-data-only; it should never fetch provider metadata or become a catalog mirror
 
 ---

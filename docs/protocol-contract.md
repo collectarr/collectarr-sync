@@ -1,14 +1,24 @@
-﻿# Sync Protocol Contract v1
+# Sync Protocol Contract v1
 
-## Purpose and boundaries
+## Ownership and identity
 
-Collectarr Sync stores App-owned personal state only. Core remains the source-neutral catalog API. Sync never stores or distributes canonical catalog records, catalog snapshots, provider identifiers, provider envelopes, ingest jobs, or provider provenance.
+Collectarr Sync mirrors complete App-owned library entries and personal state
+between devices for one authenticated user. Core remains the source-neutral
+catalog service. Sync does not perform provider search or ingest.
 
-Each change is scoped by the authenticated Sync user, `entity_type`, and `entity_id`. A catalog reference is serialized as `{ "kind": "...", "entity_type": "...", "id": "..." }`, with optional `root_id` and `parent_id` when a kind-owned child reference needs its structural context. Sync treats those identifiers as opaque and does not impose a shared Work/Release hierarchy. An owned-copy reference is `{ "kind": "...", "id": "..." }`.
+Every change is scoped by authenticated user, `entity_type`, and `entity_id`.
+For `library_entry`, `entity_id` is the entry's stable local identity. Its
+payload contains the entry's catalog fields, personal fields, optional Core
+provenance, and record timestamps. `source_catalog_ref` is provenance only; it
+does not make the entry a child of a Core record. `catalog_data` is the
+entry-owned snapshot and remains editable independently on each entry.
 
-## Version
+## Version and reset
 
-The current wire protocol is version 1. The current SQLite store schema is also version 1.
+The wire protocol and SQLite store schema are version 1. A fresh v1 deployment
+is required. Older personal payload formats are unsupported after the
+coordinated cutover. Do not point the new protocol at a live old-format Sync
+database or delete the old database as part of implementation.
 
 ```http
 GET /health
@@ -18,45 +28,71 @@ GET /health
 { "status": "ok", "protocol_version": 1, "schema_version": 1 }
 ```
 
-A fresh v1 deployment is required for this protocol. Older personal payload formats are unsupported after the coordinated cutover.
+## Authentication and endpoints
 
-## Authentication and isolation
-
-Sync authenticates each request and partitions stored entities and changes by the authenticated user. A user's devices can only read, overwrite, or delete rows in that user's partition. Deployments must configure per-user authentication; a shared development key is suitable only for a single-user local instance.
-
-## Endpoints
+Sync partitions entities and changes by the authenticated user. A user's
+devices can only read, overwrite, or delete rows in that user's partition.
+Deployments must configure per-user authentication; the shared development key
+is only suitable for a single-user local instance.
 
 - `POST /sync/push` accepts personal changes.
-- `POST /sync/pull` returns the current entities, optionally since a timestamp.
+- `POST /sync/pull` returns current entities, optionally since a timestamp.
 - `GET /sync/changes?since=...` returns the ordered change log.
 - `GET /sync/status` returns counts for the authenticated user.
 
-Each pushed change has `entity_type`, `entity_id`, `action` (`upsert` or `delete`), `client_changed_at`, and a typed personal `payload`. Deletes use a tombstone and may send an empty payload.
+Each pushed change has `entity_type`, `entity_id`, `action` (`upsert` or
+`delete`), `client_changed_at`, and a typed payload. Deletes use tombstones and
+may send an empty payload when the entity type permits it.
 
 ## Supported personal entities
 
-`owned_copy` represents an App-owned copy as a first-class Sync entity. It carries the copy's personal fields and a reference to its Core Catalog Item. Catalog records remain owned by Core; Sync carries owned copies, wishlist entries, tracking, sessions, and other explicitly supported personal state.
-
-| Entity type | Payload identity and contents |
+| Entity type | Payload |
 |---|---|
-| `owned_copy` | `catalog_ref`, an optional `target_ref` only when that kind has a distinct owned target below the Catalog Item, and the user's copy fields such as condition, purchase details, location, notes, and kind-owned copy details. Music copies target one concrete album Catalog Item and omit `target_ref`. |
-| `wishlist_item` | `catalog_ref`, target price, currency, notes, and creation time. |
-| `tracking_entry` | `catalog_ref`, optional `owned_ref`, status, rating, dates, progress, notes, and kind-owned progress fields. |
-| `tracking_unit` | `catalog_ref`, optional `owned_ref` and `tracking_entry_id`, completion time, plus kind-owned unit coordinates. |
-| `watch_session` | `catalog_ref`, watch time, source, rating, notes, and kind-owned episode coordinates. |
-| `custom_episode` | `catalog_ref` and the user's custom episode fields. |
-| `metadata_override` | `target_ref`, `field_key`, and the user's override value. |
+| `library_entry` | `kind`, `catalog_data`, `personal_data`, optional `source_catalog_ref`, `updated_at`, and optional `created_at`/`deleted_at`. `id` may be included and must match `entity_id`. Kind-specific data stays opaque to Sync. A personal `quantity` value is retained. |
+| `wishlist_item` | Catalog Item reference, target price, currency, notes, and creation time. |
+| `tracking_entry` | Required local `library_entry_ref`, status, dates, progress, and kind-owned progress fields. |
+| `tracking_unit` | Required local `library_entry_ref`, optional tracking entry ID, completion time, and kind-owned unit coordinates. |
+| `watch_session` | Required local `library_entry_ref`, watch time, source, rating, notes, and kind-owned episode coordinates. |
+| `music_listen_event` | Required Music `library_entry_ref`, listen timestamp, and personal location or notes. |
+| `custom_episode` | Local `library_entry_ref` for an Anime or TV entry and custom episode fields. |
+| `metadata_override` | Local `library_entry_ref`, field key, and override value. |
 | `location` | User-owned location name, parent, description, and order. |
+| `user_folder` | User-owned folder name, parent, icon, description, and order. Folder membership is carried by the owning `library_entry` snapshot. |
 | `pick_list_value` | User vocabulary list, optional kind, value, and order. |
 
-The accepted entity set is explicit. Unknown entity types and removed snapshot or anchor payloads are rejected. Loans, folders, reading queues, custom-field values, and personal images must be added to this contract together with their App queue producers before they can be advertised as cross-device Sync features.
+The accepted entity set is explicit. Unknown entity types and removed snapshot
+or Work/Release anchor payloads are rejected. The App packages entry-owned
+images and custom-field values in reserved `personal_data` keys
+`__sync_item_images` and `__sync_custom_fields`; Sync treats those keys as
+opaque parts of the complete entry snapshot, and the App materializes them into
+their local attachment tables on pull. They are not separate Sync entity types.
+Loans, folder membership, reading queue position, and user-created external
+links are opaque personal attachments in each complete
+`library_entry.personal_data` snapshot. Folder definitions are synced as
+`user_folder` entities. The App materializes attachments in local tables and
+replaces them with each authoritative entry snapshot.
 
-Tracking entries, tracking units, and watch sessions require `catalog_ref`. The removed `target_ref` spelling is not accepted as an alias; kind-specific episode and chapter coordinates remain separate payload fields.
+Catalog Item references use `{ "kind": "...", "id": "..." }`. A
+`library_entry_ref` uses the same shape but identifies a local entry.
+Entry-owned custom fields, images, external links, tracking state, tracking
+units, watch sessions, and Music listening events use that local identity and
+do not carry a second `catalog_ref`. Wishlist records may target a Catalog Item before a local entry
+exists. Nested `target_ref`, `entity_type`,
+`root_id`, and `parent_id` values are rejected. Kind-specific episode and
+chapter coordinates remain explicit fields in their owning payloads.
 
-## Conflict handling and deletes
+## Conflicts and deletes
 
-The service uses last-write-wins by `client_changed_at` within a user's entity key. A stale write is rejected with the winning service payload so the client can review or retry it. A delete is stored as a tombstone until a newer upsert replaces it. The append-only change log is retained for `SYNC_CHANGE_RETENTION_DAYS` (default 90); pruning old changes does not remove current entity state or tombstones.
+The service uses last-write-wins by `client_changed_at` within a user's entity
+key. A stale write is rejected with the winning payload so the client can
+review or retry it. A delete is stored as a tombstone until a newer upsert
+replaces it. The append-only change log is retained for
+`SYNC_CHANGE_RETENTION_DAYS` (default 90); pruning old changes does not remove
+current entity state or tombstones.
 
-## Reset and backup
+## Fresh database setup
 
-Sync creates only the v1 schema on a new, empty database path. To adopt v1 in development, stop Sync, retain the existing database and any `-wal`/`-shm` sidecars outside the data directory, then configure the v1 instance with a different empty database path. Do not point a live deployment at the new schema or remove an existing database as part of this implementation.
+Sync creates schema v1 on an empty database path. For a development reset,
+stop Sync, retain the old database and its `-wal`/`-shm` sidecars outside the
+data directory, and configure the v1 instance with a different empty database
+path. Do not deploy or reset a live database as part of this implementation.
