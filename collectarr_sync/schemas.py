@@ -17,14 +17,16 @@ MediaKind = Literal[
     "tv",
 ]
 SyncEntityType = Literal[
-    "owned_copy",
+    "library_entry",
     "wishlist_item",
     "tracking_entry",
     "tracking_unit",
     "watch_session",
+    "music_listen_event",
     "custom_episode",
     "metadata_override",
     "location",
+    "user_folder",
     "pick_list_value",
 ]
 SYNC_PROTOCOL_VERSION = 1
@@ -36,23 +38,20 @@ def as_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
-def _reject_target_ref_alias(value: Any) -> Any:
+def _reject_nested_target(value: Any) -> Any:
     if isinstance(value, dict) and "target_ref" in value:
-        raise ValueError("target_ref is not supported; use catalog_ref")
+        raise ValueError("target_ref is not part of the Catalog Item v1 protocol")
     return value
 
 
-class CatalogEntityRefPayload(BaseModel):
+class CatalogItemRefPayload(BaseModel):
     kind: MediaKind
-    entity_type: str = Field(min_length=1, max_length=80)
     id: str = Field(min_length=1, max_length=120)
-    root_id: str | None = Field(default=None, min_length=1, max_length=120)
-    parent_id: str | None = Field(default=None, min_length=1, max_length=120)
 
     model_config = {"extra": "forbid"}
 
 
-class OwnedCopyRefPayload(BaseModel):
+class LibraryEntryRefPayload(BaseModel):
     kind: MediaKind
     id: str = Field(min_length=1, max_length=120)
 
@@ -60,8 +59,7 @@ class OwnedCopyRefPayload(BaseModel):
 
 
 class TrackingEntryPayload(BaseModel):
-    catalog_ref: CatalogEntityRefPayload
-    owned_ref: OwnedCopyRefPayload | None = None
+    library_entry_ref: LibraryEntryRefPayload
     source_type: TrackingSourceType | None = None
     status: str | None = Field(default=None, min_length=1, max_length=64)
     rating: int | None = Field(default=None, ge=0, le=10)
@@ -78,8 +76,10 @@ class TrackingEntryPayload(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def reject_target_ref_alias(cls, value: Any) -> Any:
-        return _reject_target_ref_alias(value)
+    def reject_nested_target(cls, value: Any) -> Any:
+        if isinstance(value, dict) and "catalog_ref" in value:
+            raise ValueError("tracking entries use library_entry_ref only")
+        return _reject_nested_target(value)
 
     @field_validator("started_at", "finished_at")
     @classmethod
@@ -110,69 +110,43 @@ class TrackingEntryPayload(BaseModel):
         return value
 
 
-class _CatalogTargetPayload(BaseModel):
-    catalog_ref: CatalogEntityRefPayload
-    target_ref: CatalogEntityRefPayload | None = None
+class LibraryEntryPayload(BaseModel):
+    id: str | None = Field(default=None, min_length=1, max_length=120)
+    kind: MediaKind
+    catalog_data: dict[str, Any]
+    personal_data: dict[str, Any]
+    source_catalog_ref: CatalogItemRefPayload | None = None
+    created_at: datetime | None = None
+    updated_at: datetime
+    deleted_at: datetime | None = None
 
     model_config = {"extra": "forbid"}
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_nested_target(cls, value: Any) -> Any:
+        return _reject_nested_target(value)
 
-class OwnedCopyPayload(_CatalogTargetPayload):
-    created_at: datetime | None = None
-    is_digital: bool | None = None
-    condition: str | None = Field(default=None, min_length=1, max_length=120)
-    grade: str | None = Field(default=None, min_length=1, max_length=64)
-    purchase_date: datetime | None = None
-    price_paid_cents: int | None = Field(default=None, ge=0)
-    currency: str | None = Field(default=None, min_length=1, max_length=16)
-    personal_notes: str | None = Field(default=None, max_length=4000)
-    quantity: int = Field(default=1, ge=1)
-    index_number: int | None = Field(default=None, ge=0)
-    cover_price_cents: int | None = Field(default=None, ge=0)
-    raw_or_slabbed: str | None = Field(default=None, max_length=64)
-    grading_company: str | None = Field(default=None, max_length=120)
-    grader_notes: str | None = Field(default=None, max_length=4000)
-    signed_by: str | None = Field(default=None, max_length=255)
-    key_comic: bool = False
-    key_reason: str | None = Field(default=None, max_length=4000)
-    rating: int | None = Field(default=None, ge=0, le=10)
-    read_status: str | None = Field(default=None, min_length=1, max_length=64)
-    started_at: datetime | None = None
-    finished_at: datetime | None = None
-    tags: str | None = Field(default=None, max_length=1000)
-    sold_at: datetime | None = None
-    sell_price_cents: int | None = Field(default=None, ge=0)
-    sold_to: str | None = Field(default=None, max_length=255)
-    location_id: str | None = Field(default=None, min_length=1, max_length=120)
-    purchase_store: str | None = Field(default=None, max_length=255)
-    box_set_id: str | None = Field(default=None, min_length=1, max_length=120)
-    box_set_name: str | None = Field(default=None, max_length=255)
-    collection_status: str | None = Field(default=None, max_length=64)
-    last_bag_board_date: datetime | None = None
-    market_value_cents: int | None = Field(default=None, ge=0)
+    @model_validator(mode="after")
+    def validate_source_kind(self):
+        if self.source_catalog_ref is not None and self.source_catalog_ref.kind != self.kind:
+            raise ValueError("source_catalog_ref kind must match library entry kind")
+        return self
 
-    # The owning kind may add typed, kind-specific copy details.
-    model_config = {"extra": "allow"}
-
-    @field_validator("created_at", "purchase_date", "started_at", "finished_at", "sold_at", "last_bag_board_date")
+    @field_validator("created_at", "updated_at", "deleted_at")
     @classmethod
     def normalize_datetimes(cls, value: datetime | None) -> datetime | None:
         return as_utc(value) if value else None
 
-    @field_validator("finished_at")
-    @classmethod
-    def validate_finished_at(cls, value: datetime | None, info) -> datetime | None:
-        started_at = info.data.get("started_at")
-        if value and started_at and value < started_at:
-            raise ValueError("finished_at must not be earlier than started_at")
-        return value
 
-
-class WishlistItemPayload(_CatalogTargetPayload):
+class WishlistItemPayload(BaseModel):
+    catalog_ref: CatalogItemRefPayload
     target_price_cents: int | None = Field(default=None, ge=0)
     currency: str | None = Field(default=None, min_length=1, max_length=16)
     notes: str | None = Field(default=None, max_length=4000)
     created_at: datetime | None = None
+
+    model_config = {"extra": "forbid"}
 
     @field_validator("created_at")
     @classmethod
@@ -181,7 +155,7 @@ class WishlistItemPayload(_CatalogTargetPayload):
 
 
 class WatchSessionPayload(BaseModel):
-    catalog_ref: CatalogEntityRefPayload
+    library_entry_ref: LibraryEntryRefPayload
     tracking_entry_id: str | None = Field(default=None, min_length=1, max_length=120)
     season_number: int | None = Field(default=None, ge=0)
     episode_number: int | None = Field(default=None, ge=0)
@@ -191,28 +165,73 @@ class WatchSessionPayload(BaseModel):
     rating: int | None = Field(default=None, ge=0, le=10)
     notes: str | None = Field(default=None, max_length=4000)
 
-    model_config = {"extra": "allow"}
+    model_config = {"extra": "forbid"}
 
     @model_validator(mode="before")
     @classmethod
-    def reject_target_ref_alias(cls, value: Any) -> Any:
-        return _reject_target_ref_alias(value)
+    def reject_nested_target(cls, value: Any) -> Any:
+        return _reject_nested_target(value)
 
     @field_validator("watched_at")
     @classmethod
     def normalize_watched_at(cls, value: datetime) -> datetime:
         return as_utc(value)
 
+    @model_validator(mode="after")
+    def validate_owned_entry_kind(self):
+        if self.library_entry_ref.kind not in {"anime", "tv"}:
+            raise ValueError("watch sessions require an Anime or TV library entry")
+        return self
+
+
+class MusicListenEventPayload(BaseModel):
+    library_entry_ref: LibraryEntryRefPayload
+    listened_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    location: str | None = Field(default=None, max_length=255)
+    notes: str | None = Field(default=None, max_length=4000)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None
+
+    model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def validate_library_entry_kind(self):
+        if self.library_entry_ref.kind != "music":
+            raise ValueError("music listen events require a Music library entry")
+        if self.finished_at and self.started_at and self.finished_at < self.started_at:
+            raise ValueError("finished_at must not be earlier than started_at")
+        return self
+
+    @field_validator(
+        "listened_at",
+        "started_at",
+        "finished_at",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    )
+    @classmethod
+    def normalize_event_datetimes(
+        cls,
+        value: datetime | None,
+    ) -> datetime | None:
+        return as_utc(value) if value else None
+
 
 class MetadataOverridePayload(BaseModel):
-    target_ref: CatalogEntityRefPayload
+    library_entry_ref: LibraryEntryRefPayload
     field_key: str = Field(min_length=1, max_length=255)
     original_value: str | None = Field(default=None, max_length=8000)
     override_value: str = Field(min_length=0, max_length=8000)
 
+    model_config = {"extra": "forbid"}
+
 
 class CustomEpisodePayload(BaseModel):
-    catalog_ref: CatalogEntityRefPayload
+    library_entry_ref: LibraryEntryRefPayload
     season_number: int = Field(ge=0, le=9999)
     episode_number: int = Field(ge=0, le=99999)
     title: str = Field(min_length=1, max_length=500)
@@ -222,6 +241,14 @@ class CustomEpisodePayload(BaseModel):
     still_image_url: str | None = Field(default=None, max_length=2048)
     local_image_path: str | None = Field(default=None, max_length=4096)
     thumbnail_image_url: str | None = Field(default=None, max_length=2048)
+
+    model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def validate_entry_kind(self) -> "CustomEpisodePayload":
+        if self.library_entry_ref.kind not in {"anime", "tv"}:
+            raise ValueError("custom episodes require an Anime or TV library entry")
+        return self
 
 
 class PickListValuePayload(BaseModel):
@@ -238,23 +265,33 @@ class LocationPayload(BaseModel):
     sort_order: int = Field(default=0, ge=0)
 
 
+class UserFolderPayload(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    parent_id: str | None = Field(default=None, min_length=1, max_length=120)
+    icon_name: str | None = Field(default=None, max_length=120)
+    sort_order: int = Field(default=0, ge=0)
+
+
 class TrackingUnitPayload(BaseModel):
-    catalog_ref: CatalogEntityRefPayload
+    library_entry_ref: LibraryEntryRefPayload
     tracking_entry_id: str | None = Field(default=None, min_length=1, max_length=120)
-    owned_ref: OwnedCopyRefPayload | None = None
     completed_at: datetime
 
     model_config = {"extra": "allow"}
 
     @model_validator(mode="before")
     @classmethod
-    def reject_target_ref_alias(cls, value: Any) -> Any:
-        return _reject_target_ref_alias(value)
+    def reject_nested_target(cls, value: Any) -> Any:
+        if isinstance(value, dict) and "catalog_ref" in value:
+            raise ValueError("tracking units use library_entry_ref only")
+        return _reject_nested_target(value)
 
     @field_validator("completed_at")
     @classmethod
     def normalize_completed_at(cls, value: datetime) -> datetime:
         return as_utc(value)
+
 
 
 class SyncChangeIn(BaseModel):
@@ -272,29 +309,65 @@ class SyncChangeIn(BaseModel):
 
     @field_validator("payload")
     @classmethod
-    def validate_payload_for_entity_type(cls, value: dict[str, Any], info) -> dict[str, Any]:
+    def validate_payload_for_entity_type(
+        cls,
+        value: dict[str, Any],
+        info,
+    ) -> dict[str, Any]:
         entity_type = info.data.get("entity_type")
         action = info.data.get("action")
-        if action == "delete":
+        if (
+            action == "delete"
+            and entity_type != "library_entry"
+            and entity_type != "music_listen_event"
+            and not value
+        ):
             return value
+        if entity_type == "music_listen_event":
+            return MusicListenEventPayload.model_validate(value).model_dump(
+                mode="json", exclude_none=True
+            )
         if entity_type == "tracking_entry":
-            return TrackingEntryPayload.model_validate(value).model_dump(exclude_none=True)
-        if entity_type == "owned_copy":
-            return OwnedCopyPayload.model_validate(value).model_dump(exclude_none=True)
-        if entity_type == "wishlist_item":
-            return WishlistItemPayload.model_validate(value).model_dump(exclude_none=True)
-        if entity_type == "tracking_unit":
-            return TrackingUnitPayload.model_validate(value).model_dump(exclude_none=True)
-        if entity_type == "watch_session":
-            return WatchSessionPayload.model_validate(value).model_dump(exclude_none=True)
+            return TrackingEntryPayload.model_validate(value).model_dump(
+                mode="json", exclude_none=True
+            )
         if entity_type == "metadata_override":
-            return MetadataOverridePayload.model_validate(value).model_dump(exclude_none=True)
+            return MetadataOverridePayload.model_validate(value).model_dump(
+                mode="json", exclude_none=True
+            )
+        if entity_type == "library_entry":
+            payload = LibraryEntryPayload.model_validate(value)
+            if payload.id is not None and payload.id != info.data.get("entity_id"):
+                raise ValueError("library_entry payload id must match entity_id")
+            return payload.model_dump(mode="json", exclude_none=True)
+        if entity_type == "wishlist_item":
+            return WishlistItemPayload.model_validate(value).model_dump(
+                mode="json", exclude_none=True
+            )
+        if entity_type == "tracking_unit":
+            return TrackingUnitPayload.model_validate(value).model_dump(
+                mode="json", exclude_none=True
+            )
+        if entity_type == "watch_session":
+            return WatchSessionPayload.model_validate(value).model_dump(
+                mode="json", exclude_none=True
+            )
         if entity_type == "custom_episode":
-            return CustomEpisodePayload.model_validate(value).model_dump(exclude_none=True)
+            return CustomEpisodePayload.model_validate(value).model_dump(
+                mode="json", exclude_none=True
+            )
         if entity_type == "pick_list_value":
-            return PickListValuePayload.model_validate(value).model_dump(exclude_none=True)
+            return PickListValuePayload.model_validate(value).model_dump(
+                mode="json", exclude_none=True
+            )
         if entity_type == "location":
-            return LocationPayload.model_validate(value).model_dump(exclude_none=True)
+            return LocationPayload.model_validate(value).model_dump(
+                mode="json", exclude_none=True
+            )
+        if entity_type == "user_folder":
+            return UserFolderPayload.model_validate(value).model_dump(
+                mode="json", exclude_none=True
+            )
         return value
 
 
