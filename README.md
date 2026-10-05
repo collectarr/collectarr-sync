@@ -130,6 +130,9 @@ with both the semantic version tag and `latest`.
 See [docs/library-parity-contract.md](docs/library-parity-contract.md) for Sync
 field alignment with the shared Core contract.
 
+See [docs/current-status.md](docs/current-status.md) for the active protocol
+model and reset limits.
+
 ## 🗺️ Current Focus
 
 See [docs/protocol-contract.md](docs/protocol-contract.md) for the v1 payload
