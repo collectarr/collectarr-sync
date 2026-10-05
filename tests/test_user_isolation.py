@@ -15,17 +15,19 @@ def _owned_change(entity_id: str, condition: str) -> dict:
         "device_id": "device-1",
         "changes": [
             {
-                "entity_type": "owned_copy",
+                "entity_type": "library_entry",
                 "entity_id": entity_id,
                 "action": "upsert",
                 "client_changed_at": "2026-01-15T10:00:00Z",
                 "payload": {
-                    "catalog_ref": {
+                    "kind": "comic",
+                    "catalog_data": {"title": "Example Comic"},
+                    "personal_data": {"condition": condition},
+                    "source_catalog_ref": {
                         "kind": "comic",
-                        "entity_type": "work",
                         "id": "comic-1",
                     },
-                    "condition": condition,
+                    "updated_at": "2026-01-15T10:00:00Z",
                 },
             }
         ],
@@ -51,8 +53,8 @@ async def test_users_do_not_overwrite_each_other(client):
 
     assert len(alice_pull["entities"]) == 1
     assert len(bob_pull["entities"]) == 1
-    assert alice_pull["entities"][0]["payload"]["condition"] == "Near Mint"
-    assert bob_pull["entities"][0]["payload"]["condition"] == "Good"
+    assert alice_pull["entities"][0]["payload"]["personal_data"]["condition"] == "Near Mint"
+    assert bob_pull["entities"][0]["payload"]["personal_data"]["condition"] == "Good"
 
 
 @pytest.mark.asyncio

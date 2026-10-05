@@ -48,7 +48,7 @@ may send an empty payload when the entity type permits it.
 
 | Entity type | Payload |
 |---|---|
-| `library_entry` | `kind`, `catalog_data`, `personal_data`, optional `source_catalog_ref`, `updated_at`, and optional `created_at`/`deleted_at`. `id` may be included and must match `entity_id`. Kind-specific data stays opaque to Sync. A personal `quantity` value is retained. |
+| `library_entry` | `kind`, `catalog_data`, `personal_data`, optional `source_catalog_ref`, `updated_at`, and optional `created_at`/`deleted_at`. `id` may be included and must match `entity_id`. Kind-specific data stays opaque to Sync. Each entry represents one independently managed local item. |
 | `wishlist_item` | Catalog Item reference, target price, currency, notes, and creation time. |
 | `tracking_entry` | Required local `library_entry_ref`, status, dates, progress, and kind-owned progress fields. |
 | `tracking_unit` | Required local `library_entry_ref`, optional tracking entry ID, completion time, and kind-owned unit coordinates. |

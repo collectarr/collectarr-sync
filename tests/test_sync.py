@@ -5,18 +5,18 @@ import pytest
 from collectarr_sync.db import connect
 
 
-def _owned_copy_payload(**overrides):
-    payload = {
-        "catalog_ref": {"kind": "comic", "entity_type": "work", "id": "comic-1"},
-        "quantity": 1,
-        "key_comic": False,
+def _library_entry_payload(**personal_overrides):
+    return {
+        "kind": "comic",
+        "catalog_data": {"title": "Example Comic"},
+        "personal_data": {"key_comic": False, **personal_overrides},
+        "source_catalog_ref": {"kind": "comic", "id": "comic-1"},
+        "updated_at": "2026-05-11T10:00:00Z",
     }
-    payload.update(overrides)
-    return payload
 
 
 def _catalog_item_ref(kind: str, item_id: str) -> dict[str, str]:
-    return {"kind": kind, "entity_type": "work", "id": item_id}
+    return {"kind": kind, "id": item_id}
 
 
 @pytest.mark.asyncio
@@ -35,15 +35,17 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
             "device_id": "desktop",
             "changes": [
                 {
-                    "entity_type": "owned_copy",
+                    "entity_type": "library_entry",
                     "entity_id": "owned-1",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:00:00Z",
                     "payload": {
-                        "catalog_ref": _catalog_item_ref("comic", "comic-1"),
-                        "is_digital": True,
-                        "condition": "Near Mint",
-                        "grade": "9.8",
+                        **_library_entry_payload(
+                            is_digital=True,
+                            condition="Near Mint",
+                            grade="9.8",
+                        ),
+                        "source_catalog_ref": _catalog_item_ref("comic", "comic-1"),
                     },
                 }
             ],
@@ -58,11 +60,12 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
     assert pull.status_code == 200
     data = pull.json()
     assert data["entities"][0]["entity_id"] == "owned-1"
-    assert data["entities"][0]["payload"]["is_digital"] is True
-    assert data["entities"][0]["payload"]["grade"] == "9.8"
-    assert data["entities"][0]["payload"]["catalog_ref"] == _catalog_item_ref(
+    assert data["entities"][0]["payload"]["personal_data"]["is_digital"] is True
+    assert data["entities"][0]["payload"]["personal_data"]["grade"] == "9.8"
+    assert data["entities"][0]["payload"]["source_catalog_ref"] == _catalog_item_ref(
         "comic", "comic-1"
     )
+    assert data["entities"][0]["payload"]["catalog_data"]["title"] == "Example Comic"
     assert data["changes"] == []
 
     incremental = await client.post(
@@ -217,7 +220,7 @@ async def test_push_rejects_unknown_tracking_source_type(client, sync_headers):
 
 
 @pytest.mark.asyncio
-async def test_catalog_item_snapshots_are_not_sync_entities(client, sync_headers):
+async def test_catalog_items_are_not_sync_entities(client, sync_headers):
     response = await client.post(
         "/sync/push",
         headers=sync_headers,
@@ -230,7 +233,6 @@ async def test_catalog_item_snapshots_are_not_sync_entities(client, sync_headers
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:00:00Z",
                     "payload": {
-                        "snapshot_version": 1,
                         "kind": "comic",
                         "title": "Absolute Batman",
                         "item_number": "1",
@@ -282,7 +284,7 @@ async def test_push_then_pull_returns_wishlist_catalog_item(client, sync_headers
 
 
 @pytest.mark.asyncio
-async def test_push_rejects_owned_copy_without_catalog_item_reference(
+async def test_push_rejects_library_entry_without_catalog_and_personal_data(
     client, sync_headers
 ):
     response = await client.post(
@@ -292,13 +294,11 @@ async def test_push_rejects_owned_copy_without_catalog_item_reference(
             "device_id": "desktop",
             "changes": [
                 {
-                    "entity_type": "owned_copy",
+                    "entity_type": "library_entry",
                     "entity_id": "owned-3",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:00:00Z",
-                    "payload": {
-                        "condition": "Near Mint",
-                    },
+                    "payload": {"condition": "Near Mint"},
                 }
             ],
         },
@@ -320,14 +320,17 @@ async def test_push_rejects_unknown_catalog_kind(client, sync_headers):
             "device_id": "desktop",
             "changes": [
                 {
-                    "entity_type": "owned_copy",
+                    "entity_type": "library_entry",
                     "entity_id": "owned-2",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:00:00Z",
                     "payload": {
-                        "catalog_ref": {
+                        "kind": "comic",
+                        "catalog_data": {},
+                        "personal_data": {},
+                        "updated_at": "2026-05-11T10:00:00Z",
+                        "source_catalog_ref": {
                             "kind": "unknown",
-                            "entity_type": "work",
                             "id": "comic-1",
                         },
                     },
@@ -351,11 +354,11 @@ async def test_sync_status_reports_counts(client, sync_headers):
             "device_id": "desktop",
             "changes": [
                 {
-                    "entity_type": "owned_copy",
+                    "entity_type": "library_entry",
                     "entity_id": "owned-1",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:00:00Z",
-                    "payload": _owned_copy_payload(),
+                    "payload": _library_entry_payload(),
                 }
             ],
         },
@@ -377,7 +380,7 @@ async def test_sync_status_reports_counts(client, sync_headers):
 @pytest.mark.asyncio
 async def test_sync_devices_reports_seen_devices(client, sync_headers):
     for device_id, entity_type, entity_id in [
-        ("desktop", "owned_copy", "comic-1"),
+        ("desktop", "library_entry", "comic-1"),
         ("phone", "wishlist_item", "comic-2"),
     ]:
         await client.post(
@@ -389,11 +392,22 @@ async def test_sync_devices_reports_seen_devices(client, sync_headers):
                     {
                         "entity_type": entity_type,
                         "entity_id": entity_id,
-                        "action": "upsert",
-                        "client_changed_at": "2026-05-12T08:00:00Z",
-                        "payload": {
-                            "catalog_ref": _catalog_item_ref("comic", entity_id)
-                        },
+                            "action": "upsert",
+                            "client_changed_at": "2026-05-12T08:00:00Z",
+                            "payload": (
+                                {
+                                    **_library_entry_payload(),
+                                    "source_catalog_ref": _catalog_item_ref(
+                                        "comic", entity_id
+                                    ),
+                                }
+                                if entity_type == "library_entry"
+                                else {
+                                    "catalog_ref": _catalog_item_ref(
+                                        "comic", entity_id
+                                    )
+                                }
+                            ),
                     }
                 ],
             },
@@ -421,11 +435,11 @@ async def test_stale_client_change_is_rejected(client, sync_headers):
             "device_id": "desktop",
             "changes": [
                 {
-                    "entity_type": "owned_copy",
+                    "entity_type": "library_entry",
                     "entity_id": "owned-1",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T12:00:00Z",
-                    "payload": _owned_copy_payload(grade="9.8"),
+                    "payload": _library_entry_payload(grade="9.8"),
                 }
             ],
         },
@@ -438,11 +452,11 @@ async def test_stale_client_change_is_rejected(client, sync_headers):
             "device_id": "android",
             "changes": [
                 {
-                    "entity_type": "owned_copy",
+                    "entity_type": "library_entry",
                     "entity_id": "owned-1",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T11:00:00Z",
-                    "payload": _owned_copy_payload(grade="9.4"),
+                    "payload": _library_entry_payload(grade="9.4"),
                 }
             ],
         },
@@ -453,7 +467,7 @@ async def test_stale_client_change_is_rejected(client, sync_headers):
     assert data["accepted"] == []
     assert data["rejected"][0]["reason"] == "server_has_newer_client_change"
     assert data["rejected"][0]["current_action"] == "upsert"
-    assert data["rejected"][0]["current_payload"] == _owned_copy_payload(grade="9.8")
+    assert data["rejected"][0]["current_payload"] == _library_entry_payload(grade="9.8")
 
 
 @pytest.mark.asyncio
@@ -506,7 +520,7 @@ async def test_push_prunes_old_change_log_entries(client, sync_headers):
             """,
             (
                 "old-change",
-                "owned_copy",
+                "library_entry",
                 "owned-old",
                 "upsert",
                 "{}",
@@ -546,11 +560,11 @@ async def test_multi_device_conflict_includes_service_state(client, sync_headers
             "device_id": "device-A",
             "changes": [
                 {
-                    "entity_type": "owned_copy",
+                    "entity_type": "library_entry",
                     "entity_id": "shared-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": _owned_copy_payload(grade="9.0"),
+                    "payload": _library_entry_payload(grade="9.0"),
                 }
             ],
         },
@@ -564,11 +578,11 @@ async def test_multi_device_conflict_includes_service_state(client, sync_headers
             "device_id": "device-B",
             "changes": [
                 {
-                    "entity_type": "owned_copy",
+                    "entity_type": "library_entry",
                     "entity_id": "shared-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T09:00:00Z",
-                    "payload": _owned_copy_payload(grade="8.5"),
+                    "payload": _library_entry_payload(grade="8.5"),
                 }
             ],
         },
@@ -582,8 +596,8 @@ async def test_multi_device_conflict_includes_service_state(client, sync_headers
     rejected = data["rejected"][0]
     assert rejected["entity_id"] == "shared-1"
     assert rejected["reason"] == "server_has_newer_client_change"
-    assert rejected["current_payload"]["grade"] == "9.0"
-    assert rejected["current_payload"]["catalog_ref"]["id"] == "comic-1"
+    assert rejected["current_payload"]["personal_data"]["grade"] == "9.0"
+    assert rejected["current_payload"]["source_catalog_ref"]["id"] == "comic-1"
     assert rejected["current_action"] == "upsert"
 
 
@@ -598,11 +612,11 @@ async def test_retry_after_conflict_with_newer_timestamp(client, sync_headers):
             "device_id": "device-A",
             "changes": [
                 {
-                    "entity_type": "owned_copy",
+                    "entity_type": "library_entry",
                     "entity_id": "retry-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": _owned_copy_payload(grade="9.0"),
+                    "payload": _library_entry_payload(grade="9.0"),
                 }
             ],
         },
@@ -616,11 +630,11 @@ async def test_retry_after_conflict_with_newer_timestamp(client, sync_headers):
             "device_id": "device-B",
             "changes": [
                 {
-                    "entity_type": "owned_copy",
+                    "entity_type": "library_entry",
                     "entity_id": "retry-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T11:00:00Z",
-                    "payload": _owned_copy_payload(grade="8.5"),
+                    "payload": _library_entry_payload(grade="8.5"),
                 }
             ],
         },
@@ -628,7 +642,42 @@ async def test_retry_after_conflict_with_newer_timestamp(client, sync_headers):
 
     assert response.status_code == 200
     assert len(response.json()["accepted"]) == 1
-    assert response.json()["accepted"][0]["payload"]["grade"] == "8.5"
+    assert response.json()["accepted"][0]["payload"]["personal_data"]["grade"] == "8.5"
+
+
+@pytest.mark.asyncio
+async def test_library_entry_accepts_quantity_and_keeps_catalog_and_personal_data(
+    client, sync_headers
+):
+    payload = {
+        **_library_entry_payload(quantity=2, condition="Near Mint"),
+        "id": "album-entry-1",
+        "kind": "music",
+        "source_catalog_ref": _catalog_item_ref("music", "music-core-1"),
+    }
+    response = await client.post(
+        "/sync/push",
+        headers=sync_headers,
+        json={
+            "device_id": "desktop",
+            "changes": [
+                {
+                    "entity_type": "library_entry",
+                    "entity_id": "album-entry-1",
+                    "action": "upsert",
+                    "client_changed_at": "2026-05-11T10:00:00Z",
+                    "payload": payload,
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+    stored = response.json()["accepted"][0]["payload"]
+    assert stored["id"] == "album-entry-1"
+    assert stored["catalog_data"]["title"] == "Example Comic"
+    assert stored["personal_data"]["quantity"] == 2
+    assert stored["personal_data"]["condition"] == "Near Mint"
+    assert stored["source_catalog_ref"] == _catalog_item_ref("music", "music-core-1")
 
 
 @pytest.mark.asyncio
@@ -641,11 +690,11 @@ async def test_remove_device_clears_change_history(client, sync_headers):
             "device_id": "old-phone",
             "changes": [
                 {
-                    "entity_type": "owned_copy",
+                    "entity_type": "library_entry",
                     "entity_id": "phone-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": _owned_copy_payload(),
+                    "payload": _library_entry_payload(),
                 }
             ],
         },
@@ -720,12 +769,12 @@ async def test_push_is_idempotent_with_client_change_id(client, sync_headers):
         "device_id": "device-1",
         "changes": [
             {
-                "entity_type": "owned_copy",
+                "entity_type": "library_entry",
                 "entity_id": "owned-1",
                 "action": "upsert",
                 "client_change_id": "op-123",
                 "client_changed_at": "2026-01-15T10:00:00Z",
-                "payload": _owned_copy_payload(condition="Near Mint"),
+                "payload": _library_entry_payload(condition="Near Mint"),
             }
         ],
     }
@@ -761,18 +810,21 @@ async def test_status_reports_entity_tombstone_change_counts(client, sync_header
             "device_id": "desktop",
             "changes": [
                 {
-                    "entity_type": "owned_copy",
+                    "entity_type": "library_entry",
                     "entity_id": "stat-1",
                     "action": "upsert",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": _owned_copy_payload(),
+                    "payload": _library_entry_payload(),
                 },
                 {
-                    "entity_type": "owned_copy",
+                    "entity_type": "library_entry",
                     "entity_id": "stat-2",
                     "action": "delete",
                     "client_changed_at": "2026-06-01T10:00:00Z",
-                    "payload": {},
+                    "payload": {
+                        **_library_entry_payload(),
+                        "deleted_at": "2026-06-01T10:00:00Z",
+                    },
                 },
             ],
         },
@@ -811,7 +863,7 @@ async def test_pull_prunes_old_change_log_entries(client, sync_headers):
             """,
             (
                 "old-change",
-                "owned_copy",
+                "library_entry",
                 "owned-old",
                 "upsert",
                 "{}",
