@@ -19,8 +19,9 @@ rewritten during implementation. A new deployment starts from an empty v1
 database path. Tests remain deferred until the implementation pass is complete.
 # Collection sharing
 
-The service supports owner-isolated, revocable public and unlisted collection
-snapshots. Personal field inclusion is explicit. Publications are refreshed by
+The service supports owner-isolated public collection snapshots, public Partial
+visibility without personal data, and optional revocable private sharing links.
+Personal field inclusion is explicit. Publications are refreshed by
 the client when saving sharing settings, rather than by personal sync updates.
 See [collection-sharing.md](collection-sharing.md) for endpoints and limits.
 

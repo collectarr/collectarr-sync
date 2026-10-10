@@ -152,7 +152,7 @@ async def shared_collection(token: str) -> HTMLResponse:
         sharing.render_collection(data),
         headers={
             "Cache-Control": "no-store",
-            "X-Robots-Tag": "noindex" if data["visibility"] == "partial" else "index",
+            "X-Robots-Tag": "noindex" if data["visibility"] == "private" else "index",
             "Content-Security-Policy": "default-src 'none'; img-src https: http:; style-src 'unsafe-inline'",
         },
     )
