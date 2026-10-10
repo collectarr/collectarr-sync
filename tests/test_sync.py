@@ -90,7 +90,7 @@ async def test_push_then_pull_returns_tracking_entry(client, sync_headers):
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:05:00Z",
                     "payload": {
-                        "catalog_ref": _catalog_item_ref("movie", "movie-1"),
+                        "library_entry_ref": {"kind": "movie", "id": "owned-movie-1"},
                         "source_type": "digital",
                         "status": "Watching",
                         "rating": 8,
@@ -109,9 +109,10 @@ async def test_push_then_pull_returns_tracking_entry(client, sync_headers):
     entity = pull.json()["entities"][0]
     assert entity["entity_type"] == "tracking_entry"
     assert entity["entity_id"] == "tracking-1"
-    assert entity["payload"]["catalog_ref"] == _catalog_item_ref(
-        "movie", "movie-1"
-    )
+    assert entity["payload"]["library_entry_ref"] == {
+        "kind": "movie",
+        "id": "owned-movie-1",
+    }
     assert entity["payload"]["source_type"] == "digital"
 
 
