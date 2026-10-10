@@ -26,11 +26,16 @@ class SharePublication(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     kind: Literal["music", "book", "comic", "manga", "movie", "tv", "anime", "game", "boardgame"]
     visibility: Literal["private", "partial", "public"]
+    private_link_enabled: bool = False
     include_personal: bool = False
     items: list[ShareItem] = Field(default_factory=list, max_length=10000)
 
     @model_validator(mode="after")
     def validate_snapshot(self):
+        if self.visibility == "partial" and self.include_personal:
+            raise ValueError("Partial sharing excludes personal fields")
+        if self.visibility != "private" and self.private_link_enabled:
+            raise ValueError("Private sharing links require private visibility")
         if len({item.id for item in self.items}) != len(self.items):
             raise ValueError("Share item IDs must be unique")
         if not self.include_personal and any(item.personal_fields for item in self.items):
@@ -44,19 +49,23 @@ async def publish(user_id: str, collection_id: str, snapshot: SharePublication) 
     db = await connect()
     try:
         cursor = await db.execute(
-            "select token from collection_shares where user_id = ? and collection_id = ?",
+            "select token, visibility from collection_shares where user_id = ? and collection_id = ?",
             (user_id, collection_id),
         )
         existing = await cursor.fetchone()
+        inaccessible = snapshot.visibility == "private" and not snapshot.private_link_enabled
+        reuse_token = (
+            existing
+            and existing["token"]
+            and (existing["visibility"] == "private") == (snapshot.visibility == "private")
+        )
         token = (
             None
-            if snapshot.visibility == "private"
-            else (
-                existing["token"] if existing and existing["token"] else secrets.token_urlsafe(24)
-            )
+            if inaccessible
+            else (existing["token"] if reuse_token else secrets.token_urlsafe(24))
         )
         data = snapshot.model_dump(mode="json")
-        if snapshot.visibility == "private":
+        if inaccessible:
             data["items"] = []
         await db.execute(
             """insert into collection_shares (user_id, collection_id, token, visibility, payload_json)
@@ -93,7 +102,7 @@ async def public_snapshot(token: str) -> dict:
     db = await connect()
     try:
         cursor = await db.execute(
-            "select payload_json from collection_shares where token = ? and visibility != 'private'",
+            "select payload_json from collection_shares where token = ?",
             (token,),
         )
         row = await cursor.fetchone()
@@ -108,7 +117,7 @@ async def public_collections() -> list[dict]:
     db = await connect()
     try:
         cursor = await db.execute(
-            "select token, payload_json from collection_shares where visibility = 'public'"
+            "select token, payload_json from collection_shares where visibility in ('partial', 'public')"
         )
         return [
             {"token": row["token"], "title": json.loads(row["payload_json"])["title"]}
