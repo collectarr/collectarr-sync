@@ -69,6 +69,14 @@ async def initialize_database() -> None:
             create index if not exists ix_entities_changed_at
               on entities (user_id, changed_at);
             create index if not exists ix_entities_user on entities (user_id);
+            create table if not exists collection_shares (
+              user_id text not null,
+              collection_id text not null,
+              token text unique,
+              visibility text not null check (visibility in ('private', 'partial', 'public')),
+              payload_json text not null,
+              primary key (user_id, collection_id)
+            );
             """
         )
         await connection.commit()

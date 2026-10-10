@@ -22,6 +22,9 @@ from collectarr_sync.schemas import (
     as_utc,
 )
 from collectarr_sync.service import SyncService
+from collectarr_sync import sharing
+from fastapi.responses import HTMLResponse
+from html import escape
 
 
 @asynccontextmanager
@@ -75,9 +78,7 @@ class SyncUser:
 
 async def resolve_sync_user(
     x_collectarr_sync_key: Annotated[str | None, Header()] = None,
-    bearer: Annotated[
-        HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)
-    ] = None,
+    bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)] = None,
 ) -> SyncUser:
     """Authenticate with the shared development key or a JWT Bearer token."""
     settings = get_settings()
@@ -116,6 +117,45 @@ async def resolve_sync_user(
 
 
 AuthenticatedUser = Annotated[SyncUser, Depends(resolve_sync_user)]
+
+
+@app.get("/sharing")
+async def collection_sharing_settings(user: AuthenticatedUser, kind: str) -> list[dict]:
+    return await sharing.settings_for(user.user_id, kind)
+
+
+@app.put("/sharing/{collection_id}")
+async def publish_collection(
+    collection_id: str, snapshot: sharing.SharePublication, user: AuthenticatedUser
+) -> dict:
+    if not collection_id or len(collection_id) > 200:
+        raise HTTPException(422, "Invalid collection ID")
+    return await sharing.publish(user.user_id, collection_id, snapshot)
+
+
+@app.get("/public", response_class=HTMLResponse)
+async def browse_public_collections() -> HTMLResponse:
+    collections = await sharing.public_collections()
+    links = "".join(
+        f'<p><a href="/public/{item["token"]}">{escape(item["title"])}</a></p>'
+        for item in collections
+    )
+    return HTMLResponse(
+        sharing.page("Public collections", links), headers={"Cache-Control": "no-store"}
+    )
+
+
+@app.get("/public/{token}", response_class=HTMLResponse)
+async def shared_collection(token: str) -> HTMLResponse:
+    data = await sharing.public_snapshot(token)
+    return HTMLResponse(
+        sharing.render_collection(data),
+        headers={
+            "Cache-Control": "no-store",
+            "X-Robots-Tag": "noindex" if data["visibility"] == "partial" else "index",
+            "Content-Security-Policy": "default-src 'none'; img-src https: http:; style-src 'unsafe-inline'",
+        },
+    )
 
 
 @app.get("/health", tags=["system"])
@@ -181,8 +221,6 @@ async def pull(payload: SyncPullRequest, user: AuthenticatedUser) -> SyncPullRes
 
 
 @app.get("/sync/changes", response_model=SyncChangesResponse, tags=["sync"])
-async def changes(
-    user: AuthenticatedUser, since: datetime | None = None
-) -> SyncChangesResponse:
+async def changes(user: AuthenticatedUser, since: datetime | None = None) -> SyncChangesResponse:
     normalized_since = as_utc(since) if since else None
     return await SyncService().changes(normalized_since, user_id=user.user_id)
