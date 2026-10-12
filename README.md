@@ -1,155 +1,199 @@
 # Collectarr Sync
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![GitHub Release](https://img.shields.io/github/v/release/collectarr/collectarr-sync)
+[![GitHub Release](https://img.shields.io/github/v/release/collectarr/collectarr-sync)](https://github.com/collectarr/collectarr-sync/releases)
 [![Issues](https://img.shields.io/github/issues/collectarr/collectarr-sync)](https://github.com/collectarr/collectarr-sync/issues)
-![Made with Python](https://img.shields.io/badge/Made%20with-Python-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.14+-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)
-![Deploy](https://img.shields.io/badge/Deploy-Docker%20%7C%20Self--Hosted-2496ED?logo=docker&logoColor=white)
 
-> Optional personal sync service for Collectarr: device-aware push/pull APIs, conflict review, tombstones, and backup-friendly storage.
+Collectarr Sync is the optional self-hosted service for **App-owned library
+entries and personal state**. It provides device-aware push/pull, conflict
+responses, tombstones, change history, pairing and explicit collection sharing.
 
-Collectarr Sync keeps App-owned personal state in sync between a user's
-devices. It does not fetch provider metadata, ingest catalog data, or own the
-canonical catalog. Shared metadata stays in `collectarr-core`, while personal
-state remains local-first in `collectarr-app`.
+Core owns the canonical shared catalog. Sync carries complete local entry
+snapshots, including their catalog and personal maps; it does not search Core,
+interpret kind-owned catalog fields or become a second canonical catalog.
 
----
+## Protocol and storage
 
-## ✨ Features
+The wire protocol and SQLite schema are **version 1**. Each entity/change is scoped
+by authenticated user, entity type and stable local identity. A library entry's
+optional Core reference is provenance, not its sync identity.
 
-### 🔄 Personal Sync Protocol
+- `library_entry` carries `kind`, `catalog_data`, `personal_data`, timestamps and
+  optional `source_catalog_ref`.
+- Explicit personal entities carry tracking, units, watch/listening sessions,
+  custom episodes, vocabulary, location and folder definitions where supported.
+- The App packs images and custom fields into reserved entry personal keys and
+  materializes them on pull. Loans, folder membership, queue position and local
+  links are also entry-owned attachments, not standalone canonical entities.
+- Kind-owned maps remain opaque to Sync; supported envelopes and entity types
+  are validated explicitly.
+- Stale writes are rejected with the winning service state. Conflict ordering
+  uses `client_changed_at`; clients must keep timestamps and review conflicts.
+- Deletes become tombstones. Change-log retention defaults to 90 days; pruning
+  history does not remove current entities or tombstones.
 
-- Authenticated push, pull, changes, status, and device APIs
-- Sync protocol and schema versions so clients can identify the active contract
-- Explicitly typed personal collection entities, tombstones, and bounded change logs stored in SQLite
-- Explicit service health and retention reporting instead of opaque background state
+See [protocol-contract.md](docs/protocol-contract.md) for the exact accepted
+payloads. The current schema is created on a new, empty SQLite database path;
+there is no runtime upgrade or old-payload adapter.
 
-### 📱 Device Identity And Conflict Handling
+## Local development
 
-- Stable device identity for multi-device sync and pairing flows
-- Rejection of stale local writes when another device already committed newer state
-- Conflict payloads detailed enough for `collectarr-app` to review and recover instead of silently overwriting data
-- No standalone Core catalog entities; complete local entry snapshots carry
-  their kind metadata alongside personal fields
-
-### 🧰 Operations And Backup
-
-- Simple FastAPI deployment for local LAN or self-hosted Docker usage
-- Backup and restore guidance for the SQLite database and mounted Docker volume
-- User-partitioned storage for personal use and self-hosted deployments
-- Clear repo boundary relative to `collectarr-app` and `collectarr-core`
-
----
-
-## 🚀 Quick Start
-
-### Local development setup
+Use **Python 3.14+**, matching the package and CI:
 
 ```powershell
-python -m pip install -e .[dev]
-python -m ruff check .
-python -m pytest
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+python -m pip check
+$env:SYNC_API_KEY='collectarr-sync-dev-key'
+$env:SYNC_DATABASE_PATH='./collectarr-sync-dev.db'
+python -m uvicorn collectarr_sync.main:app --host 127.0.0.1 --port 8020 --reload
 ```
 
-### Run locally
+The service initializes its SQLite schema at startup. Choose a new development
+path; keep existing databases and backups untouched. Bind to `0.0.0.0` when a LAN
+device needs access and configure its reachable URL.
 
-```powershell
-$env:SYNC_API_KEY="dev-sync-key"
-uvicorn collectarr_sync.main:app --host 0.0.0.0 --port 8020 --reload
-```
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Service health, protocol/schema versions |
+| `POST /sync/push` | Push supported changes |
+| `POST /sync/pull` | Pull current state, optionally since a timestamp |
+| `GET /sync/changes` | Ordered retained changes |
+| `GET /sync/status` | Authenticated user's counts/status |
+| `GET /sync/devices` / `DELETE /sync/devices/{device_id}` | Device listing/removal |
+| `GET /sync/pairing-code` | API-key-protected connection pairing payload |
+| `/docs` | Swagger API reference |
 
-### Run with Docker
+Local service: http://localhost:8020. Docs: http://localhost:8020/docs.
+
+## Docker
 
 ```powershell
 docker build -t collectarr-sync .
 docker run --rm -p 8020:8020 `
-  -e SYNC_API_KEY=dev-sync-key `
+  -e SYNC_API_KEY=collectarr-sync-dev-key `
   -e SYNC_DATABASE_PATH=/data/collectarr-sync.db `
+  -e SYNC_PUBLIC_BASE_URL=http://localhost:8020 `
   -v collectarr_sync_data:/data `
   collectarr-sync
 ```
 
-### Local URLs
+Keep the database inside the persistent volume. Set `SYNC_PUBLIC_BASE_URL` to the
+address devices can actually reach; pairing uses it. Core's sibling development
+stack can also launch Sync through `tools/dev.ps1 start -WithSync`.
 
-| Service | URL |
-|---------|-----|
-| Sync API | http://localhost:8020 |
-| Sync docs (Swagger) | http://localhost:8020/docs |
+## Configuration and authentication
 
----
+[collectarr_sync/config.py](collectarr_sync/config.py) defines the active settings:
 
-## 🧱 Repository Boundary
+| Setting | Purpose |
+| --- | --- |
+| `SYNC_DATABASE_PATH` | SQLite file location |
+| `SYNC_API_KEY` | Shared-key authentication |
+| `SYNC_JWT_SECRET` | Enables HS256 bearer-token authentication |
+| `SYNC_PUBLIC_BASE_URL` | Advertised connection/pairing URL |
+| `SYNC_CHANGE_RETENTION_DAYS` | Retained change history, default 90 |
+| `ENVIRONMENT` | Development/test versus deployed configuration |
+| `CORS_ORIGINS` | Allowed browser origins as a JSON array |
 
-This repository owns sync push/pull/change APIs, sync storage, device identity,
-pairing protocol support, tombstones, conflict handling, and backup / restore
-docs.
+The `X-Collectarr-Sync-Key` header authenticates the single default partition.
+It does not distinguish multiple users. Per-user bearer tokens require
+`SYNC_JWT_SECRET` and a non-empty `sub`; that subject identifies the user's
+partition. Pairing-code generation is API-key-only because its payload contains
+the shared key. Core sign-in alone is not proof of a personal sync session.
 
-It deliberately does not own:
+For a non-development deployment, configure a non-default key, the intended
+per-user authentication and the browser origins you serve. The service is
+self-hosted; its authentication and public URL must match your deployment.
 
-- canonical catalog records or catalog snapshots
-- provider search
-- provider IDs, envelopes, or ingest workflows
-- catalog editorial workflows
-- local collection UX
+App development defaults can be supplied at build time:
 
-Those responsibilities stay split across the other Collectarr repos.
+```powershell
+flutter run `
+  --dart-define=COLLECTARR_SYNC_BASE_URL=http://localhost:8020 `
+  --dart-define=COLLECTARR_SYNC_KEY=collectarr-sync-dev-key
+```
 
----
+App also exposes **Settings → Connection**. An Android emulator reaches the host
+via `10.0.2.2`; other devices need a LAN/public address rather than their own
+localhost.
 
-## 🔄 Releases
+## Collection sharing
 
-Release publishing is manual-only. The `Release` GitHub Actions workflow uses
-`workflow_dispatch`; pushing to `main` runs CI only.
+Sharing publishes an explicit client-built snapshot independently of personal
+sync. Saving Cloud Sharing settings in App republishes that collection; later
+personal sync updates do **not** automatically refresh a publication.
 
-When a releasable version is detected, the workflow publishes a GitHub Release
-and pushes the sync container image to `ghcr.io/collectarr/collectarr-sync`
-with both the semantic version tag and `latest`.
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /sharing?kind=music` | Owner's sharing settings |
+| `PUT /sharing/{collection_id}` | Replace owner's snapshot/visibility |
+| `GET /public` | Public collection directory |
+| `GET /public/{token}` | Public or enabled private-link collection viewer |
 
----
+Partial visibility is public without personal fields. Public visibility can
+include personal fields explicitly. Private visibility revokes publication unless
+an optional private link is enabled; those links are absent from the directory.
+Personal inclusion is explicit, and access-mode changes rotate tokens.
 
-## 🛠 Troubleshooting
+Snapshots have a 10,000-item and 5 MB serialized limit. See
+[collection-sharing.md](docs/collection-sharing.md) for visibility, revocation
+and validation details.
 
-- **Sync requests are rejected immediately**: verify `SYNC_API_KEY` matches what `collectarr-app` is configured to send.
-- **State disappears after container recreation**: mount a persistent Docker volume and keep `SYNC_DATABASE_PATH` inside that volume.
-- **Pairing works on one machine but not over LAN**: bind the service to a reachable host/IP and confirm the client can reach port `8020` through local firewall rules.
-- **Conflicts keep reappearing**: inspect the returned stale-change details in the app and resolve with a deliberate keep-local / keep-service / retry flow instead of repeated blind retries.
+## Checks and backups
 
----
+```powershell
+$env:ENVIRONMENT='test'
+$env:SYNC_API_KEY='test-sync-key'
+python -m ruff check .
+python -m pytest
+```
 
-## 🔗 Related Repos
+Tests cover the service against their configured isolated storage; Core/PostgreSQL
+are not required for Sync's SQLite contract tests. The exact CI gate is in
+[tests.yml](.github/workflows/tests.yml).
 
-| Repo | Purpose |
-|------|---------|
-| `collectarr-app` | Flutter client that owns local-first shelf state and conflict review UX |
-| `collectarr-core` | Source-neutral canonical metadata catalog, proposals, and admin server |
+Stop Sync before copying a database backup. Preserve the SQLite file and any
+`-wal`/`-shm` sidecars together. Store the backup outside the mounted data directory.
+Restore with the service stopped, using the supported schema. A flat CSV export
+from App is not a Sync database backup. See [deployment and backup](docs/sync.md).
 
-## 🧭 Library Parity Contract
+## Troubleshooting
 
-See [docs/library-parity-contract.md](docs/library-parity-contract.md) for Sync
-field alignment with the shared Core contract.
+- **401 responses:** check shared key or bearer token/secret/subject; they select
+  different authentication paths.
+- **Missing data after recreation:** check persistent volume and database path.
+- **Pairing URL unreachable:** check public base URL, bind address, firewall and
+  browser CORS; localhost on another device means that device itself.
+- **Repeated conflicts:** inspect the returned winning state and client timestamp
+  rather than blindly retrying the same stale write.
+- **Shared page out of date:** republish from App's Cloud Sharing page; sync alone
+  does not refresh it.
 
-See [docs/current-status.md](docs/current-status.md) for the active protocol
-model and reset limits.
+## Releases and related projects
 
-## 🗺️ Current Focus
+Pushes to `main` run CI. Release/container publishing responds to manual dispatch
+or a published GitHub release, with build-only/existing-release modes defined in
+[release.yml](.github/workflows/release.yml). Images are published under
+`ghcr.io/collectarr/collectarr-sync`; choose versions from
+[GitHub Releases](https://github.com/collectarr/collectarr-sync/releases).
 
-See [docs/protocol-contract.md](docs/protocol-contract.md) for the v1 payload
-contract and [docs/sync.md](docs/sync.md) for deployment and reset guidance.
+| Repository | Responsibility |
+| --- | --- |
+| [collectarr-app](https://github.com/collectarr/collectarr-app) | Local library, personal records, sync queue, conflict UI and snapshot publication |
+| [collectarr-core](https://github.com/collectarr/collectarr-core) | Canonical catalog, source-neutral proposals/corrections, search and images |
+| `collectarr-site` | Separate product website and shared user manual, prepared locally |
 
-Current Sync work:
-
-- make pairing reliable enough for MVP with manual code, QR render, and clear LAN setup docs
-- deepen conflict actions beyond review: keep service, keep local, retry local, and surface stale-client causes clearly
-- harden backup/restore around the SQLite database, WAL files, and service health checks
-- keep the v1 personal payload contract aligned with App queue producers and attachment snapshots
-- keep the service intentionally personal-data-only; it should never fetch provider metadata or become a catalog mirror
-
----
+**Help → User Manual** in App opens the shared manual's kind chapter. Initial
+website publication is pending. Protocol/deployment references in this repository
+are developer documentation, separate from that end-user guide. Dated
+[current-status.md](docs/current-status.md) reports are historical evidence;
+implementation and protocol sources remain authoritative.
 
 ## Support
 
-If Collectarr is useful to you, you can support ongoing development on Ko-fi:
-
-[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/saitatter)
+[![Support on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/saitatter)
