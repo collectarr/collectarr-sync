@@ -7,10 +7,10 @@ from collectarr_sync.db import connect
 
 def _library_entry_payload(**personal_overrides):
     return {
-        "kind": "comic",
+        "kind": "music",
         "catalog_data": {"title": "Example Comic"},
-        "personal_data": {"key_comic": False, **personal_overrides},
-        "source_catalog_ref": {"kind": "comic", "id": "comic-1"},
+        "personal_data": {"signed": False, **personal_overrides},
+        "source_catalog_ref": {"kind": "music", "id": "music-1"},
         "updated_at": "2026-05-11T10:00:00Z",
     }
 
@@ -45,7 +45,7 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
                             condition="Near Mint",
                             grade="9.8",
                         ),
-                        "source_catalog_ref": _catalog_item_ref("comic", "comic-1"),
+                        "source_catalog_ref": _catalog_item_ref("music", "music-1"),
                     },
                 }
             ],
@@ -63,7 +63,7 @@ async def test_push_then_pull_returns_personal_entity(client, sync_headers):
     assert data["entities"][0]["payload"]["personal_data"]["is_digital"] is True
     assert data["entities"][0]["payload"]["personal_data"]["grade"] == "9.8"
     assert data["entities"][0]["payload"]["source_catalog_ref"] == _catalog_item_ref(
-        "comic", "comic-1"
+        "music", "music-1"
     )
     assert data["entities"][0]["payload"]["catalog_data"]["title"] == "Example Comic"
     assert data["changes"] == []
@@ -90,9 +90,9 @@ async def test_push_then_pull_returns_tracking_entry(client, sync_headers):
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:05:00Z",
                     "payload": {
-                        "library_entry_ref": {"kind": "movie", "id": "owned-movie-1"},
+                        "library_entry_ref": {"kind": "music", "id": "owned-music-1"},
                         "source_type": "digital",
-                        "status": "Watching",
+                        "status": "Listening",
                         "rating": 8,
                     },
                 }
@@ -110,8 +110,8 @@ async def test_push_then_pull_returns_tracking_entry(client, sync_headers):
     assert entity["entity_type"] == "tracking_entry"
     assert entity["entity_id"] == "tracking-1"
     assert entity["payload"]["library_entry_ref"] == {
-        "kind": "movie",
-        "id": "owned-movie-1",
+        "kind": "music",
+        "id": "owned-music-1",
     }
     assert entity["payload"]["source_type"] == "digital"
 
@@ -230,11 +230,11 @@ async def test_catalog_items_are_not_sync_entities(client, sync_headers):
             "changes": [
                 {
                     "entity_type": "library_item_snapshot",
-                    "entity_id": "comic-1",
+                    "entity_id": "music-1",
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:00:00Z",
                     "payload": {
-                        "kind": "comic",
+                        "kind": "music",
                         "title": "Absolute Batman",
                         "item_number": "1",
                         "cover_image_url": "https://cdn.example/absolute.jpg",
@@ -265,7 +265,7 @@ async def test_push_then_pull_returns_wishlist_catalog_item(client, sync_headers
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:00:00Z",
                     "payload": {
-                        "catalog_ref": _catalog_item_ref("comic", "comic-1"),
+                        "catalog_ref": _catalog_item_ref("music", "music-1"),
                         "notes": "Want the slipcase",
                     },
                 }
@@ -280,7 +280,7 @@ async def test_push_then_pull_returns_wishlist_catalog_item(client, sync_headers
     entity = pull.json()["entities"][0]
     assert entity["entity_type"] == "wishlist_item"
     assert entity["payload"]["catalog_ref"] == _catalog_item_ref(
-        "comic", "comic-1"
+        "music", "music-1"
     )
 
 
@@ -326,13 +326,13 @@ async def test_push_rejects_unknown_catalog_kind(client, sync_headers):
                     "action": "upsert",
                     "client_changed_at": "2026-05-11T10:00:00Z",
                     "payload": {
-                        "kind": "comic",
+                        "kind": "music",
                         "catalog_data": {},
                         "personal_data": {},
                         "updated_at": "2026-05-11T10:00:00Z",
                         "source_catalog_ref": {
                             "kind": "unknown",
-                            "id": "comic-1",
+                            "id": "music-1",
                         },
                     },
                 }
@@ -381,8 +381,8 @@ async def test_sync_status_reports_counts(client, sync_headers):
 @pytest.mark.asyncio
 async def test_sync_devices_reports_seen_devices(client, sync_headers):
     for device_id, entity_type, entity_id in [
-        ("desktop", "library_entry", "comic-1"),
-        ("phone", "wishlist_item", "comic-2"),
+        ("desktop", "library_entry", "music-1"),
+        ("phone", "wishlist_item", "music-2"),
     ]:
         await client.post(
             "/sync/push",
@@ -399,13 +399,13 @@ async def test_sync_devices_reports_seen_devices(client, sync_headers):
                                 {
                                     **_library_entry_payload(),
                                     "source_catalog_ref": _catalog_item_ref(
-                                        "comic", entity_id
+                                        "music", entity_id
                                     ),
                                 }
                                 if entity_type == "library_entry"
                                 else {
                                     "catalog_ref": _catalog_item_ref(
-                                        "comic", entity_id
+                                        "music", entity_id
                                     )
                                 }
                             ),
@@ -598,7 +598,7 @@ async def test_multi_device_conflict_includes_service_state(client, sync_headers
     assert rejected["entity_id"] == "shared-1"
     assert rejected["reason"] == "server_has_newer_client_change"
     assert rejected["current_payload"]["personal_data"]["grade"] == "9.0"
-    assert rejected["current_payload"]["source_catalog_ref"]["id"] == "comic-1"
+    assert rejected["current_payload"]["source_catalog_ref"]["id"] == "music-1"
     assert rejected["current_action"] == "upsert"
 
 

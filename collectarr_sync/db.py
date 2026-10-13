@@ -4,7 +4,7 @@ import aiosqlite
 
 from collectarr_sync.config import get_settings
 
-# The v1 database is created as a fresh baseline. There is no database upgrade path.
+# The current schema is baseline 1. Future changes require ordered migrations.
 CURRENT_SCHEMA_VERSION = 1
 
 
@@ -28,9 +28,22 @@ async def connect() -> aiosqlite.Connection:
 async def initialize_database() -> None:
     connection = await connect()
     try:
+        row = await (await connection.execute("pragma user_version")).fetchone()
+        version = row[0]
+        rows = await (await connection.execute(
+            "select name from sqlite_master where type = 'table' and name not like 'sqlite_%'"
+        )).fetchall()
+        tables = {row[0] for row in rows}
+        if version == CURRENT_SCHEMA_VERSION:
+            if tables != {"entities", "changes", "collection_shares"}:
+                raise RuntimeError("Versioned Sync database differs from the released schema.")
+            return
+        if version != 0 or tables:
+            raise RuntimeError("Existing database left untouched; no explicit migration is registered.")
         await connection.executescript(
             """
-            create table if not exists entities (
+            begin immediate;
+            create table entities (
               user_id text not null default '',
               entity_type text not null,
               entity_id text not null,
@@ -77,6 +90,8 @@ async def initialize_database() -> None:
               payload_json text not null,
               primary key (user_id, collection_id)
             );
+            pragma user_version = 1;
+            commit;
             """
         )
         await connection.commit()
