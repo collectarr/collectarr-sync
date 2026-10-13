@@ -1,16 +1,20 @@
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
+from html import escape
 from importlib.metadata import PackageNotFoundError, version
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from collectarr_sync import sharing
 from collectarr_sync.config import get_settings
 from collectarr_sync.db import CURRENT_SCHEMA_VERSION, initialize_database
 from collectarr_sync.schemas import (
+    SYNC_PROTOCOL_VERSION,
     SyncChangesResponse,
     SyncDeviceResponse,
     SyncPullRequest,
@@ -18,7 +22,6 @@ from collectarr_sync.schemas import (
     SyncPushRequest,
     SyncPushResponse,
     SyncStatusResponse,
-    SYNC_PROTOCOL_VERSION,
     as_utc,
 )
 from collectarr_sync.service import SyncService
@@ -68,25 +71,19 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 
 @dataclass(frozen=True, slots=True)
 class SyncUser:
-    """Authenticated sync user. user_id is empty for legacy API-key auth."""
+    """Authenticated Sync user; the shared development key uses the default partition."""
 
     user_id: str = ""
 
 
 async def resolve_sync_user(
     x_collectarr_sync_key: Annotated[str | None, Header()] = None,
-    bearer: Annotated[
-        HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)
-    ] = None,
+    bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)] = None,
 ) -> SyncUser:
-    """Authenticate via API key header *or* JWT Bearer token.
-
-    - API key: legacy mode, returns ``SyncUser(user_id="")``.
-    - JWT: decodes token, extracts ``sub`` claim as user_id.
-    """
+    """Authenticate with the shared development key or a JWT Bearer token."""
     settings = get_settings()
 
-    # Try API key first (backwards-compatible)
+    # The development key represents the default single-user partition.
     if x_collectarr_sync_key and x_collectarr_sync_key == settings.sync_api_key:
         return SyncUser()
 
@@ -120,6 +117,45 @@ async def resolve_sync_user(
 
 
 AuthenticatedUser = Annotated[SyncUser, Depends(resolve_sync_user)]
+
+
+@app.get("/sharing")
+async def collection_sharing_settings(user: AuthenticatedUser, kind: str) -> list[dict]:
+    return await sharing.settings_for(user.user_id, kind)
+
+
+@app.put("/sharing/{collection_id}")
+async def publish_collection(
+    collection_id: str, snapshot: sharing.SharePublication, user: AuthenticatedUser
+) -> dict:
+    if not collection_id or len(collection_id) > 200:
+        raise HTTPException(422, "Invalid collection ID")
+    return await sharing.publish(user.user_id, collection_id, snapshot)
+
+
+@app.get("/public", response_class=HTMLResponse)
+async def browse_public_collections() -> HTMLResponse:
+    collections = await sharing.public_collections()
+    links = "".join(
+        f'<p><a href="/public/{item["token"]}">{escape(item["title"])}</a></p>'
+        for item in collections
+    )
+    return HTMLResponse(
+        sharing.page("Public collections", links), headers={"Cache-Control": "no-store"}
+    )
+
+
+@app.get("/public/{token}", response_class=HTMLResponse)
+async def shared_collection(token: str) -> HTMLResponse:
+    data = await sharing.public_snapshot(token)
+    return HTMLResponse(
+        sharing.render_collection(data),
+        headers={
+            "Cache-Control": "no-store",
+            "X-Robots-Tag": "noindex" if data["visibility"] == "private" else "index",
+            "Content-Security-Policy": "default-src 'none'; img-src https: http:; style-src 'unsafe-inline'",
+        },
+    )
 
 
 @app.get("/health", tags=["system"])
@@ -185,8 +221,6 @@ async def pull(payload: SyncPullRequest, user: AuthenticatedUser) -> SyncPullRes
 
 
 @app.get("/sync/changes", response_model=SyncChangesResponse, tags=["sync"])
-async def changes(
-    user: AuthenticatedUser, since: datetime | None = None
-) -> SyncChangesResponse:
+async def changes(user: AuthenticatedUser, since: datetime | None = None) -> SyncChangesResponse:
     normalized_since = as_utc(since) if since else None
     return await SyncService().changes(normalized_since, user_id=user.user_id)
