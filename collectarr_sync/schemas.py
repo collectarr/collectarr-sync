@@ -245,7 +245,7 @@ class CustomEpisodePayload(BaseModel):
     model_config = {"extra": "forbid"}
 
     @model_validator(mode="after")
-    def validate_entry_kind(self) -> "CustomEpisodePayload":
+    def validate_entry_kind(self) -> CustomEpisodePayload:
         if self.library_entry_ref.kind not in {"anime", "tv"}:
             raise ValueError("custom episodes require an Anime or TV library entry")
         return self
