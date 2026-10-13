@@ -7,7 +7,7 @@ library taxonomy. Canonical metadata stays in `collectarr-core`.
 
 ## Sync-side guarantees
 
-1. Sync payloads remain compatible with the active 9 library kinds:
+1. Sync payloads remain aligned with the active 9 library kinds:
    `comic`, `manga`, `anime`, `book`, `game`, `boardgame`, `movie`, `tv`, `music`.
 2. Sync does not introduce alternate canonical kind mappings.
 3. Sync remains personal-data-only and does not ingest provider metadata.
