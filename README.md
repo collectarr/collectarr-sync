@@ -1,4 +1,4 @@
-# ?? Collectarr Sync
+# 🔄 Collectarr Sync
 
 Keep your Music library in step across devices, and share selected collections
 on your terms. Sync is the optional self-hosted companion to Collectarr.
@@ -6,7 +6,7 @@ on your terms. Sync is the optional self-hosted companion to Collectarr.
 **Version 1 supports Music only.** Existing payload shapes and behavior become
 the v1 baseline; there is no rollback to an older protocol or schema.
 
-## ? Your collection, wherever you use it
+## ✨ Your collection, wherever you use it
 
 - Synchronize complete personal library-entry snapshots between devices.
 - Keep catalog copies and personal fields together without becoming a catalog
@@ -20,19 +20,19 @@ Use [Collectarr App](https://github.com/collectarr/collectarr-app) for the libra
 experience and [Core](https://github.com/collectarr/collectarr-core) for canonical
 Music catalog information.
 
-## ?? Sharing and sync
+## 📸 Sharing and sync
 
-> **Screenshot placeholder ? Device sync:** status and connected devices.
+> **Screenshot placeholder — Device sync:** status and connected devices.
 >
-> **Screenshot placeholder ? Collection sharing:** visibility and private links.
+> **Screenshot placeholder — Collection sharing:** visibility and private links.
 
-## ?? Independent by design
+## 🧭 Independent by design
 
 Sync is part of Collectarr's independent **clean-room implementation inspired by
 CLZ collection workflows**. It is not affiliated with or endorsed by CLZ, and
 includes no CLZ source code, catalog dataset or proprietary assets.
 
-## ?? Predictable upgrades
+## 🔒 Predictable upgrades
 
 Sync stores personal snapshots, not Core catalog tables. Future persistence
 changes require explicit ordered migrations; supported data must survive
