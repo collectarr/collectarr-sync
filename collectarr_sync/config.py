@@ -24,10 +24,11 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     @model_validator(mode="after")
-    def require_sync_key_outside_dev(self) -> "Settings":
-        if self.environment not in {"development", "test"}:
-            if not self.sync_api_key or self.sync_api_key == "collectarr-sync-dev-key":
-                raise ValueError("SYNC_API_KEY must be set outside development/test")
+    def require_sync_key_outside_dev(self) -> Settings:
+        if self.environment not in {"development", "test"} and (
+            not self.sync_api_key or self.sync_api_key == "collectarr-sync-dev-key"
+        ):
+            raise ValueError("SYNC_API_KEY must be set outside development/test")
         return self
 
 
