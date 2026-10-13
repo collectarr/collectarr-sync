@@ -20,12 +20,12 @@ def _owned_change(entity_id: str, condition: str) -> dict:
                 "action": "upsert",
                 "client_changed_at": "2026-01-15T10:00:00Z",
                 "payload": {
-                    "kind": "comic",
+                    "kind": "music",
                     "catalog_data": {"title": "Example Comic"},
                     "personal_data": {"condition": condition},
                     "source_catalog_ref": {
-                        "kind": "comic",
-                        "id": "comic-1",
+                        "kind": "music",
+                        "id": "music-1",
                     },
                     "updated_at": "2026-01-15T10:00:00Z",
                 },
