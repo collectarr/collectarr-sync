@@ -1,4 +1,4 @@
-# Collectarr Sync v1 Scope
+# Current Music sync protocol
 
 ## Ownership boundary
 
@@ -46,3 +46,7 @@ empty path. See [`sync.md`](sync.md) for the operational setup.
 - User isolation remains enforced for every operation.
 - Sync does not store canonical Core catalog entities as separate records.
 - README and both protocol documents describe the same supported entity set.
+
+## Release baseline
+
+The first release accepts Music references only. New databases use baseline 1; existing unversioned databases are not modified automatically. All future persistent changes require explicit ordered, data-preserving migrations. The complete Music payload shape remains unchanged.
