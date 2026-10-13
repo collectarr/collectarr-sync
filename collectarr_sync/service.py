@@ -8,17 +8,17 @@ import aiosqlite
 from collectarr_sync.config import get_settings
 from collectarr_sync.db import connect
 from collectarr_sync.schemas import (
+    SYNC_PROTOCOL_VERSION,
     RejectedChange,
     SyncChangeIn,
     SyncChangeOut,
     SyncChangesResponse,
     SyncDeviceResponse,
+    SyncedEntity,
     SyncPullResponse,
     SyncPushRequest,
     SyncPushResponse,
     SyncStatusResponse,
-    SYNC_PROTOCOL_VERSION,
-    SyncedEntity,
     as_utc,
 )
 
@@ -36,7 +36,7 @@ def iso(value: datetime) -> str:
 def parse_dt(value: str | None) -> datetime | None:
     if value is None:
         return None
-    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
+    return datetime.fromisoformat(value).astimezone(UTC)
 
 
 class SyncService:

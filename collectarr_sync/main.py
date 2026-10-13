@@ -1,16 +1,20 @@
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
+from html import escape
 from importlib.metadata import PackageNotFoundError, version
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from collectarr_sync import sharing
 from collectarr_sync.config import get_settings
 from collectarr_sync.db import CURRENT_SCHEMA_VERSION, initialize_database
 from collectarr_sync.schemas import (
+    SYNC_PROTOCOL_VERSION,
     SyncChangesResponse,
     SyncDeviceResponse,
     SyncPullRequest,
@@ -18,13 +22,9 @@ from collectarr_sync.schemas import (
     SyncPushRequest,
     SyncPushResponse,
     SyncStatusResponse,
-    SYNC_PROTOCOL_VERSION,
     as_utc,
 )
 from collectarr_sync.service import SyncService
-from collectarr_sync import sharing
-from fastapi.responses import HTMLResponse
-from html import escape
 
 
 @asynccontextmanager
