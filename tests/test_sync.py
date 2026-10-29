@@ -801,6 +801,12 @@ async def test_health_reports_protocol_and_schema_version(client):
     assert data["schema_version"] >= 1
 
 
+def test_public_page_offers_agpl_source() -> None:
+    from collectarr_sync.sharing import page
+
+    assert "https://github.com/collectarr/collectarr-sync" in page("Example", "")
+
+
 @pytest.mark.asyncio
 async def test_status_reports_entity_tombstone_change_counts(client, sync_headers):
     # Push an upsert and a delete
