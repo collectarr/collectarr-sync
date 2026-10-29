@@ -3,6 +3,10 @@
 Keep your Music library in step across devices, and share selected collections
 on your terms. Sync is the optional self-hosted companion to Collectarr.
 
+**License:** [GNU AGPLv3 only](LICENSE) (`AGPL-3.0-only`). See the
+[contribution guide](CONTRIBUTING.md) for development and licensing terms,
+including the historical MIT notice.
+
 **Version 1 supports Music only.** Existing payload shapes and behavior become
 the v1 baseline; there is no rollback to an older protocol or schema.
 
