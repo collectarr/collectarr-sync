@@ -154,5 +154,8 @@ def page(title: str, body: str) -> str:
         "body{background:#131313;color:#eee;font:14px system-ui;margin:24px}"
         "main{max-width:1200px;margin:auto}article{background:#383838;padding:16px;margin:12px 0}"
         "img{width:120px;float:right}dt{font-weight:700}dd{margin:0 0 8px}a{color:#f2932f}"
-        f"</style></head><body><main><h1>{escape(title)}</h1>{body}</main></body></html>"
+        f"</style></head><body><main><h1>{escape(title)}</h1>{body}"
+        '<footer><p>Collectarr Sync is free software (AGPLv3). '
+        '<a href="https://github.com/collectarr/collectarr-sync">Source code</a>'
+        "</p></footer></main></body></html>"
     )
