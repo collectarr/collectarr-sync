@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 SyncAction = Literal["upsert", "delete"]
 TrackingSourceType = Literal["physical", "digital", "streaming"]
-MediaKind = Literal["music"]
+MediaKind = Literal["music", "comic"]
 SyncEntityType = Literal[
     "library_entry",
     "wishlist_item",

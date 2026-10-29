@@ -8,9 +8,10 @@ from collectarr_sync.db import initialize_database
 from collectarr_sync.schemas import CatalogItemRefPayload
 
 
-def test_only_music_references_are_released():
+def test_music_and_comics_references_are_supported():
     assert CatalogItemRefPayload(kind="music", id="album").kind == "music"
-    for kind in ("anime", "boardgame", "book", "comic", "game", "manga", "movie", "tv"):
+    assert CatalogItemRefPayload(kind="comic", id="issue").kind == "comic"
+    for kind in ("anime", "boardgame", "book", "game", "manga", "movie", "tv"):
         with pytest.raises(ValidationError):
             CatalogItemRefPayload(kind=kind, id="item")
 

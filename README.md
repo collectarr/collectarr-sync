@@ -1,13 +1,13 @@
 # 🔄 Collectarr Sync
 
-Keep your Music library in step across devices, and share selected collections
+Keep your Music and Comics libraries in step across devices, and share selected collections
 on your terms. Sync is the optional self-hosted companion to Collectarr.
 
 **License:** [GNU AGPLv3 only](LICENSE) (`AGPL-3.0-only`). See the
 [contribution guide](CONTRIBUTING.md) for development and licensing terms,
 including the historical MIT notice.
 
-**Version 1 supports Music only.** Existing payload shapes and behavior become
+**Protocol version 1 supports Music and Comics.** Existing payload shapes and behavior remain
 the v1 baseline; there is no rollback to an older protocol or schema.
 
 ## ✨ Your collection, wherever you use it
@@ -22,7 +22,7 @@ the v1 baseline; there is no rollback to an older protocol or schema.
 
 Use [Collectarr App](https://github.com/collectarr/collectarr-app) for the library
 experience and [Core](https://github.com/collectarr/collectarr-core) for canonical
-Music catalog information.
+catalog information.
 
 ## 📸 Sharing and sync
 
