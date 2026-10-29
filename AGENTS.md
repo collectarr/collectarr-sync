@@ -10,3 +10,5 @@
 - Do not rewrite history or replace published tags without an explicit request.
 - CLZ is a reference only. Do not copy its code, paid fonts or proprietary assets.
 - Sync personal library data. Core owns canonical catalog data.
+
+- Follow docs/release-notes.md for release descriptions. Write the editorial summary in docs/release-summaries.json; generate What's Changed with tool/release_notes.py. Keep contributor credit and comparison links.
