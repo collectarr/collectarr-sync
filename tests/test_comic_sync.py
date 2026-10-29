@@ -12,9 +12,9 @@ async def test_comic_snapshot_preserves_catalog_and_personal_data(client, sync_h
     }
     personal = {
         "grade": "9.8", "condition": "Near Mint", "quantity": 2,
-        "details": {"raw_or_slabbed": "Slabbed", "grading_company": "CGC",
-                    "certification_number": "123", "key_comic": True,
-                    "key_severity": "Major", "last_bag_board_date": "2026-01-02"},
+        "raw_or_slabbed": "Slabbed", "grading_company": "CGC",
+        "certification_number": "123", "key_comic": True,
+        "key_severity": "Major", "last_bag_board_date": "2026-01-02",
     }
     response = await client.post('/sync/push', headers=sync_headers, json={
         'device_id': 'desktop', 'changes': [{
