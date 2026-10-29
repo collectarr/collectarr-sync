@@ -29,6 +29,9 @@ were released under MIT; their rights remain intact and the old notice is
 preserved in [LICENSES/MIT-legacy.txt](LICENSES/MIT-legacy.txt).
 See [LICENSE](LICENSE) for the AGPLv3 terms, including network-use source
 access obligations for modified versions.
+If you deploy a modified version, offer its complete corresponding source
+to remote users under AGPLv3 section 13. Update the source link in the
+public sharing pages to point to your modified source, not just upstream.
 
 ## Community
 
