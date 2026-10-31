@@ -3,5 +3,13 @@
   "v0.1.0-alpha.2": "• Drops the legacy `storage_box` sync field in favor of the renamed `location` field, aligning with the core backend rename.\r\n• README refreshed with updated configuration examples and field documentation.\r\n\r\n### ✨ Features\r\n\r\n**Storage Box → Location Rename (#4)**\r\n\r\n• Removed `storage_box` from the sync payload; the `location` field is now the canonical storage identifier.\r\n• Updated sync logic and configuration to reference `location` throughout.\r\n\r\n**Documentation (#4)**\r\n\r\n• README updated with current field names, configuration examples, and setup guidance.\r\n\r\nFull Changelog:\r\nhttps://github.com/collectarr/collectarr-sync/compare/v0.1.0-alpha.1...v0.1.0-alpha.2",
   "v0.2.0": "This release updates Collectarr. The complete change list below records the included work.",
   "v0.2.1": "This release updates Collectarr. The complete change list below records the included work.",
-  "v0.3.0": "Stable Music-only personal-library synchronization and collection sharing. Core continues to own the canonical catalog; Sync carries personal library data and complete entry snapshots."
+  "v0.3.0": "Stable Music-only personal-library synchronization and collection sharing. Core continues to own the canonical catalog; Sync carries personal library data and complete entry snapshots.",
+  "v0.4.0": {
+    "headline": "Comics in sync",
+    "summary": "Collectarr Sync synchronizes Comics library snapshots, keeping the catalog data together with personal grading, key significance and collection fields.",
+    "highlights": [
+      "Comics library snapshots",
+      "Grading and key data kept"
+    ]
+  }
 }
