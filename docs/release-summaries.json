@@ -4,12 +4,5 @@
   "v0.2.0": "This release updates Collectarr. The complete change list below records the included work.",
   "v0.2.1": "This release updates Collectarr. The complete change list below records the included work.",
   "v0.3.0": "Stable Music-only personal-library synchronization and collection sharing. Core continues to own the canonical catalog; Sync carries personal library data and complete entry snapshots.",
-  "v0.4.0": {
-    "headline": "Comics in sync",
-    "summary": "Collectarr Sync synchronizes Comics library snapshots, keeping the catalog data together with personal grading, key significance and collection fields.",
-    "highlights": [
-      "Comics library snapshots",
-      "Grading and key data kept"
-    ]
-  }
+  "v0.4.0": "Collectarr Sync synchronizes Comics library snapshots, keeping the catalog data together with personal grading, key significance and collection fields."
 }
