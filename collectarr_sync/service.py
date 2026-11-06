@@ -213,6 +213,79 @@ class SyncService:
             await connection.close()
         return removed
 
+    async def claim_shared(self, user_id: str) -> int:
+        """Move the shared partition into an account, keeping the newer of two rows.
+
+        Moved rows get a new changed_at so the account's other devices pull them
+        whatever their cursor. Returns the number of entities moved.
+        """
+        connection = await connect()
+        try:
+            await connection.execute("begin immediate")
+            overlapping = await (
+                await connection.execute(
+                    """
+                    select shared.entity_type, shared.entity_id,
+                      shared.client_changed_at as shared_at,
+                      account.client_changed_at as account_at
+                    from entities shared
+                    join entities account
+                      on account.user_id = ?
+                      and account.entity_type = shared.entity_type
+                      and account.entity_id = shared.entity_id
+                    where shared.user_id = ''
+                    """,
+                    (user_id,),
+                )
+            ).fetchall()
+            for row in overlapping:
+                account_is_newer = parse_dt(row["account_at"]) >= parse_dt(row["shared_at"])
+                await connection.execute(
+                    "delete from entities where user_id = ? and entity_type = ? and entity_id = ?",
+                    (
+                        "" if account_is_newer else user_id,
+                        row["entity_type"],
+                        row["entity_id"],
+                    ),
+                )
+            moved = await connection.execute(
+                "update entities set user_id = ?, changed_at = ? where user_id = ''",
+                (user_id, iso(utc_now())),
+            )
+            # Client change ids stay unique per account, so a retried push remains idempotent.
+            await connection.execute(
+                """
+                delete from changes
+                where user_id = '' and client_change_id is not null and exists (
+                  select 1 from changes account
+                  where account.user_id = ?
+                    and account.device_id = changes.device_id
+                    and account.client_change_id = changes.client_change_id
+                )
+                """,
+                (user_id,),
+            )
+            await connection.execute(
+                "update changes set user_id = ? where user_id = ''", (user_id,)
+            )
+            await connection.execute(
+                """
+                delete from collection_shares
+                where user_id = '' and collection_id in (
+                  select collection_id from collection_shares where user_id = ?
+                )
+                """,
+                (user_id,),
+            )
+            await connection.execute(
+                "update collection_shares set user_id = ? where user_id = ''", (user_id,)
+            )
+            await connection.commit()
+        finally:
+            await connection.close()
+        logger.info("sync claim: user=%s entities=%d", user_id, moved.rowcount)
+        return moved.rowcount
+
     async def _accept_change(
         self,
         connection: aiosqlite.Connection,

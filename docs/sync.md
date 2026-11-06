@@ -12,7 +12,7 @@ $env:SYNC_DATABASE_PATH=".\data\collectarr-sync-v1.db"
 uvicorn collectarr_sync.main:app --host 0.0.0.0 --port 8020 --reload
 ```
 
-The development API key supports one local user partition. Configure user authentication for deployments shared by multiple accounts. Requests to `/sync/*` require the configured Sync key or the configured user bearer token.
+The development API key supports one local user partition. Set `SYNC_JWT_SECRET` to Core's `SECRET_KEY` for deployments shared by multiple accounts: each account then gets its own partition from the token it signed in with. Requests to `/sync/*` require the configured Sync key or a user bearer token. A device that signs in moves the shared partition into its account once; see the [protocol contract](protocol-contract.md).
 
 Docker example:
 

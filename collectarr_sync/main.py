@@ -80,14 +80,13 @@ async def resolve_sync_user(
     x_collectarr_sync_key: Annotated[str | None, Header()] = None,
     bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)] = None,
 ) -> SyncUser:
-    """Authenticate with the shared development key or a JWT Bearer token."""
+    """Authenticate with a JWT Bearer token or the shared key.
+
+    A signed-in account takes precedence: a device that also holds the shared key
+    must never fall back into the shared partition when its token is rejected.
+    """
     settings = get_settings()
 
-    # The development key represents the default single-user partition.
-    if x_collectarr_sync_key and x_collectarr_sync_key == settings.sync_api_key:
-        return SyncUser()
-
-    # Try JWT Bearer
     if bearer and settings.sync_jwt_secret:
         import jwt as pyjwt
 
@@ -109,6 +108,10 @@ async def resolve_sync_user(
                 detail="JWT missing 'sub' claim",
             )
         return SyncUser(user_id=str(user_id))
+
+    # The shared key represents the default single-user partition.
+    if x_collectarr_sync_key and x_collectarr_sync_key == settings.sync_api_key:
+        return SyncUser()
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -159,11 +162,12 @@ async def shared_collection(token: str) -> HTMLResponse:
 
 
 @app.get("/health", tags=["system"])
-async def health() -> dict[str, str | int]:
+async def health() -> dict[str, str | int | bool]:
     return {
         "status": "ok",
         "protocol_version": SYNC_PROTOCOL_VERSION,
         "schema_version": CURRENT_SCHEMA_VERSION,
+        "account_auth": bool(get_settings().sync_jwt_secret),
     }
 
 
@@ -208,6 +212,29 @@ async def pairing_code(_: SyncAuth) -> dict[str, str | int]:
         separators=(",", ":"),
     )
     return {"pairing_code": code, "protocol_version": SYNC_PROTOCOL_VERSION}
+
+
+@app.post("/sync/claim-shared", tags=["sync"])
+async def claim_shared(
+    user: AuthenticatedUser,
+    x_collectarr_sync_key: Annotated[str | None, Header()] = None,
+) -> dict[str, int]:
+    """Move the shared partition into the signed-in account.
+
+    Requires both credentials: the token names the account and the shared key
+    proves access to the data being moved.
+    """
+    if not user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Claiming the shared library requires a signed-in account",
+        )
+    if x_collectarr_sync_key != get_settings().sync_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Claiming the shared library requires the sync key",
+        )
+    return {"entities_moved": await SyncService().claim_shared(user.user_id)}
 
 
 @app.post("/sync/push", response_model=SyncPushResponse, tags=["sync"])
