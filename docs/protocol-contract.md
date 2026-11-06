@@ -25,8 +25,10 @@ GET /health
 ```
 
 ```json
-{ "status": "ok", "protocol_version": 1, "schema_version": 1 }
+{ "status": "ok", "protocol_version": 1, "schema_version": 1, "account_auth": true }
 ```
+
+`account_auth` tells clients whether this deployment accepts account tokens.
 
 ## Authentication and endpoints
 
@@ -34,6 +36,17 @@ Sync partitions entities and changes by the authenticated user. A user's
 devices can only read, overwrite, or delete rows in that user's partition.
 Deployments must configure per-user authentication; the shared development key
 is only suitable for a single-user local instance.
+
+Set `SYNC_JWT_SECRET` to Core's `SECRET_KEY` so Sync accepts the token a client
+got by signing in to Core; its `sub` claim names the partition. A valid token
+takes precedence over the shared key, and a rejected token is refused without
+falling back to the shared partition.
+
+`POST /sync/claim-shared` moves the shared partition into the signed-in account
+and needs both the token and the shared key. When both hold the same entity the
+newer client change wins. Moved entities get a new `changed_at`, so the account's
+other devices pull them whatever their cursor. It is safe to repeat; an empty
+shared partition moves nothing.
 
 - `POST /sync/push` accepts personal changes.
 - `POST /sync/pull` returns current entities, optionally since a timestamp.

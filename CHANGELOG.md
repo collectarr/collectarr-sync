@@ -5,6 +5,9 @@
 ### Docs
 - The README describes self-hosting and links the current documentation, without emoji or screenshot placeholders.
 
+### Features
+- Each signed-in account keeps its own library, and the first device to sign in moves the shared library into its account.
+
 ### CI & Build
 - Release notes contain only a bulleted summary and a flat list of every commit.
 - Release notes list the commits of each merged pull request under it instead of only its title.
