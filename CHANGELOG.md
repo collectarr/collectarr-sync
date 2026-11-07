@@ -10,7 +10,6 @@
 
 ### CI & Build
 - Release notes contain only a bulleted summary and a flat list of every commit.
-- Release notes list the commits of each merged pull request under it instead of only its title.
 - Releases file the Unreleased changelog entries under the new version and set the package version automatically.
 - Releases no longer carry a banner image.
 
