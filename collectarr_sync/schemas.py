@@ -1,3 +1,4 @@
+import base64
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -15,6 +16,7 @@ SyncEntityType = Literal[
     "location",
     "user_folder",
     "pick_list_value",
+    "list_value_image",
 ]
 SYNC_PROTOCOL_VERSION = 1
 
@@ -249,6 +251,22 @@ class PickListValuePayload(BaseModel):
     address: str | None = Field(default=None, max_length=2000)
 
 
+class ListValueImagePayload(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    list_key: str = Field(min_length=1, max_length=120)
+    value: str = Field(min_length=1, max_length=500)
+    # Base64 of at most 2 MB; absent on a delete.
+    image: str | None = Field(default=None, max_length=2_796_204)
+
+    @field_validator("image")
+    @classmethod
+    def validate_image(cls, value: str | None) -> str | None:
+        if value is not None:
+            base64.b64decode(value, validate=True)
+        return value
+
+
 class LocationPayload(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     parent_id: str | None = Field(default=None, min_length=1, max_length=120)
@@ -349,6 +367,10 @@ class SyncChangeIn(BaseModel):
             )
         if entity_type == "pick_list_value":
             return PickListValuePayload.model_validate(value).model_dump(
+                mode="json", exclude_none=True
+            )
+        if entity_type == "list_value_image":
+            return ListValueImagePayload.model_validate(value).model_dump(
                 mode="json", exclude_none=True
             )
         if entity_type == "location":

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Features
+- Images users load for list values, such as Custom Label images, sync between devices.
+
 ### Fixes
 - Pick list values keep their sort name, hidden state and a borrower's contact details when they sync.
 
