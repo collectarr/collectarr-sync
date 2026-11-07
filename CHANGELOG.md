@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-11-07
+
 ### Docs
 - The README describes self-hosting and links the current documentation, without emoji or screenshot placeholders.
 
