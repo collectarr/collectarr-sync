@@ -1,6 +1,6 @@
 # Collectarr Sync
 
-Keep your Music and Comics libraries in step across devices, and share selected
+Keep your Collectarr libraries in step across devices, and share selected
 collections on your terms. Sync is the optional self-hosted companion to
 Collectarr.
 
@@ -8,7 +8,7 @@ Collectarr.
 [contribution guide](CONTRIBUTING.md) for development and licensing terms,
 including the historical MIT notice.
 
-**Protocol version 1 supports Music and Comics.** Existing payload shapes and
+**Protocol version 1 supports every library the App has.** Existing payload shapes and
 behavior remain the v1 baseline; there is no rollback to an older protocol or
 schema.
 

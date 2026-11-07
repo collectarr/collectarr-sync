@@ -8,10 +8,19 @@ from collectarr_sync.db import initialize_database
 from collectarr_sync.schemas import CatalogItemRefPayload
 
 
-def test_music_and_comics_references_are_supported():
-    assert CatalogItemRefPayload(kind="music", id="album").kind == "music"
-    assert CatalogItemRefPayload(kind="comic", id="issue").kind == "comic"
-    for kind in ("anime", "boardgame", "book", "game", "manga", "movie", "tv"):
+def test_references_cover_the_libraries_the_app_has():
+    for kind in (
+        "music",
+        "comic",
+        "book",
+        "game",
+        "game_hardware",
+        "game_toy",
+        "boardgame",
+        "movie",
+    ):
+        assert CatalogItemRefPayload(kind=kind, id="item").kind == kind
+    for kind in ("anime", "manga", "tv"):
         with pytest.raises(ValidationError):
             CatalogItemRefPayload(kind=kind, id="item")
 

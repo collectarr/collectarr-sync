@@ -6,6 +6,7 @@
 - Images users load for list values, such as Custom Label images, sync between devices.
 
 ### Fixes
+- Entries of every library the App has sync; a single Games entry used to refuse the whole push.
 - Pick list values keep their sort name, hidden state and a borrower's contact details when they sync.
 
 ## 0.5.0 - 2026-11-07
