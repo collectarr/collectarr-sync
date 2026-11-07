@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixes
+- Pick list values keep their sort name, hidden state and a borrower's contact details when they sync.
+
 ## 0.5.0 - 2026-11-07
 
 ### Docs

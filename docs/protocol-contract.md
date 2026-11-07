@@ -71,7 +71,7 @@ may send an empty payload when the entity type permits it.
 | `metadata_override` | Local `library_entry_ref`, field key, and override value. |
 | `location` | User-owned location name, parent, description, and order. |
 | `user_folder` | User-owned folder name, parent, icon, description, and order. Folder membership is carried by the owning `library_entry` snapshot. |
-| `pick_list_value` | User vocabulary list, optional kind, value, and order. |
+| `pick_list_value` | User vocabulary list, optional kind, value, order, sort name and hidden state, and a borrower's email and address. |
 
 The accepted entity set is explicit. Unknown entity types and removed snapshot
 or Work/Release anchor payloads are rejected. The App packages entry-owned

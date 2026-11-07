@@ -243,6 +243,10 @@ class PickListValuePayload(BaseModel):
     media_kind: str | None = Field(default=None, max_length=64)
     value: str = Field(min_length=1, max_length=500)
     sort_order: int = Field(default=0, ge=0)
+    sort_name: str | None = Field(default=None, max_length=500)
+    is_hidden: bool | None = None
+    email: str | None = Field(default=None, max_length=320)
+    address: str | None = Field(default=None, max_length=2000)
 
 
 class LocationPayload(BaseModel):
