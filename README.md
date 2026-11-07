@@ -1,16 +1,18 @@
-# 🔄 Collectarr Sync
+# Collectarr Sync
 
-Keep your Music and Comics libraries in step across devices, and share selected collections
-on your terms. Sync is the optional self-hosted companion to Collectarr.
+Keep your Music and Comics libraries in step across devices, and share selected
+collections on your terms. Sync is the optional self-hosted companion to
+Collectarr.
 
 **License:** [GNU AGPLv3 only](LICENSE) (`AGPL-3.0-only`). See the
 [contribution guide](CONTRIBUTING.md) for development and licensing terms,
 including the historical MIT notice.
 
-**Protocol version 1 supports Music and Comics.** Existing payload shapes and behavior remain
-the v1 baseline; there is no rollback to an older protocol or schema.
+**Protocol version 1 supports Music and Comics.** Existing payload shapes and
+behavior remain the v1 baseline; there is no rollback to an older protocol or
+schema.
 
-## ✨ Your collection, wherever you use it
+## Your collection, wherever you use it
 
 - Synchronize complete personal library-entry snapshots between devices.
 - Keep catalog copies and personal fields together without becoming a catalog
@@ -24,31 +26,29 @@ Use [Collectarr App](https://github.com/collectarr/collectarr-app) for the libra
 experience and [Core](https://github.com/collectarr/collectarr-core) for canonical
 catalog information.
 
-## 📸 Sharing and sync
+## Self-hosting
 
-> **Screenshot placeholder — Device sync:** status and connected devices.
->
-> **Screenshot placeholder — Collection sharing:** visibility and private links.
+Run the published container image, `ghcr.io/collectarr/collectarr-sync`, which
+listens on port 8020. See [Sync](docs/sync.md) for configuration and running it
+locally, and [collection sharing](docs/collection-sharing.md) for visibility and
+private links. Configure authentication before exposing the service outside
+development.
 
-## 🧭 Independent by design
-
-Sync is part of Collectarr's independent **clean-room implementation inspired by
-CLZ collection workflows**. It is not affiliated with or endorsed by CLZ, and
-includes no CLZ source code, catalog dataset or proprietary assets.
-
-## 🔒 Predictable upgrades
+## Predictable upgrades
 
 Sync stores personal snapshots, not Core catalog tables. Future persistence
 changes require explicit ordered migrations; supported data must survive
 upgrades. A fresh baseline is for the initial v1 installation, never a shortcut
 for upgrading an existing user database.
 
-<details>
-<summary>Self-hosting and development</summary>
+## Independent by design
 
-Use Python 3.14 and follow the setup instructions in the deployment/protocol
-documentation under [docs](docs/). Read [AGENTS.md](AGENTS.md) for data ownership,
-isolated testing and migration requirements. Configure authentication before
-exposing the service outside development.
+Sync is part of Collectarr's independent **clean-room implementation inspired by
+CLZ collection workflows**. It is not affiliated with or endorsed by CLZ, and
+includes no CLZ source code, catalog dataset or proprietary assets.
 
-</details>
+## Development
+
+Use Python 3.14 and follow [Sync](docs/sync.md) and the
+[protocol contract](docs/protocol-contract.md). Read [AGENTS.md](AGENTS.md) for
+data ownership, isolated testing and migration requirements.

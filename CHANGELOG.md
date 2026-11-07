@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Docs
+- The README describes self-hosting and links the current documentation, without emoji or screenshot placeholders.
+
 ### CI & Build
 - Release notes list the commits of each merged pull request under it instead of only its title.
 - Releases file the Unreleased changelog entries under the new version and set the package version automatically.
