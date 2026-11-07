@@ -26,6 +26,7 @@ SyncEntityType = Literal[
     "user_folder",
     "pick_list_value",
     "list_value_image",
+    "custom_field_definition",
 ]
 SYNC_PROTOCOL_VERSION = 1
 
@@ -260,6 +261,23 @@ class PickListValuePayload(BaseModel):
     address: str | None = Field(default=None, max_length=2000)
 
 
+class CustomFieldDefinitionPayload(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    name: str = Field(min_length=1, max_length=255)
+    field_type: str = Field(min_length=1, max_length=64)
+    media_kind: str | None = Field(default=None, max_length=64)
+    edit_scope: str | None = Field(default=None, max_length=64)
+    sort_order: int = Field(default=0, ge=0)
+    options: str | None = Field(default=None, max_length=20000)
+    created_at: datetime
+
+    @field_validator("created_at")
+    @classmethod
+    def normalize_created_at(cls, value: datetime) -> datetime:
+        return as_utc(value)
+
+
 class ListValueImagePayload(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -376,6 +394,10 @@ class SyncChangeIn(BaseModel):
             )
         if entity_type == "pick_list_value":
             return PickListValuePayload.model_validate(value).model_dump(
+                mode="json", exclude_none=True
+            )
+        if entity_type == "custom_field_definition":
+            return CustomFieldDefinitionPayload.model_validate(value).model_dump(
                 mode="json", exclude_none=True
             )
         if entity_type == "list_value_image":

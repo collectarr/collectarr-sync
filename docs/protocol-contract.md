@@ -72,6 +72,7 @@ may send an empty payload when the entity type permits it.
 | `location` | User-owned location name, parent, description, and order. |
 | `user_folder` | User-owned folder name, parent, icon, description, and order. Folder membership is carried by the owning `library_entry` snapshot. |
 | `pick_list_value` | User vocabulary list, optional kind, value, order, sort name and hidden state, and a borrower's email and address. |
+| `custom_field_definition` | A custom field's name, type, optional kind and scope, order, options, and creation time. Its values travel in the owning `library_entry` snapshot. |
 | `list_value_image` | Image a user loaded for a list value: list key, value, and base64 image of at most 2 MB. The ID is derived from the list and value, so devices share one record. |
 
 The accepted entity set is explicit. Unknown entity types and removed snapshot

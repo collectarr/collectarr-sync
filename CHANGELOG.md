@@ -4,6 +4,7 @@
 
 ### Features
 - Images users load for list values, such as Custom Label images, sync between devices.
+- Custom field definitions sync between devices.
 
 ### Fixes
 - Entries of every library the App has sync; a single Games entry used to refuse the whole push.
