@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Docs
+- The README adds the project logo and status badges.
+
 ### Features
 - Images users load for list values, such as Custom Label images, sync between devices.
 - Custom field definitions sync between devices.
